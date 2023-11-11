@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "custom-rl-jax"
+version = "0.1.0"
+description = ""
+authors = ["Gabriel keith <gabe.keith@yahoo.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "~3.11"
+gymnasium = {extras = ["toy-text"], version = "^0.29.1"}
+jax = {extras = ["cpu"], version = "^0.4.20"}
+flax = "^0.7.5"
+numpy = "^1.26.1"
+matplotlib = "^3.8.1"
+jupyter = "^1.0.0"
+mypy = "^1.7.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

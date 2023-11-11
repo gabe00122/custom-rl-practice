@@ -1,0 +1,6 @@
+.DS_Store
+.idea
+
+.mypy_cache
+.venv
+.npy
