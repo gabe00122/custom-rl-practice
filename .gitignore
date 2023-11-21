@@ -3,4 +3,4 @@
 
 .mypy_cache
 .venv
-.npy
+*.npy

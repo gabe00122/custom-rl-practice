@@ -109,5 +109,5 @@ plt.plot(results)
 plt.show()
 
 # save q table
-np.save('q_table.npy', p['Q'])
-np.save('q_visits.npy', p['Q_visits'])
+np.save('../q_table.npy', p['Q'])
+np.save('../q_visits.npy', p['Q_visits'])
