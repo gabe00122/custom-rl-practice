@@ -1,42 +1,36 @@
 import gymnasium as gym
 import numpy as np
 from typing_extensions import TypedDict
+from hyper_params import HyperParams
 
-Policy = TypedDict('Policy', {'Q': np.ndarray, 'exploration': float, 'learning_rate': float, 'discount': float,
-                              'state_space': int,
-                              'action_space': int})
+Policy = TypedDict('Policy', {'Q': np.ndarray})
 
 
-def create_policy(state_space: int, action_space: int, exploration: float, learning_rate: float,
-                  discount: float) -> Policy:
+def create_policy(state_space: int, action_space: int) -> Policy:
     return {
         'Q': np.zeros((state_space, action_space)),
-        'exploration': exploration,
-        'learning_rate': learning_rate,
-        'discount': discount,
-        'state_space': state_space,
-        'action_space': action_space
     }
 
 
-def act(policy: Policy, state: int) -> int:
-    if np.random.uniform() < policy['exploration']:
-        return np.random.randint(policy['action_space'])
+def act(q: np.ndarray, params: HyperParams, state: int) -> int:
+    if np.random.uniform() < params['exploration']:
+        action_space = q.shape[1]
+        return np.random.randint(action_space)
     else:
-        return np.argmax(policy['Q'][state])
+        return np.argmax(q[state])
 
 
-def train_episode(policy: Policy, env: gym.Env):
+def train_episode(policy: Policy, params: HyperParams, env: gym.Env):
     rewards = 0
     q = policy['Q']
-    learning_rate = policy['learning_rate']
-    discount = policy['discount']
+    learning_rate = params['learning_rate']
+    discount = params['discount']
     done = False
 
     obs, _ = env.reset()
-    action = act(policy, obs)
 
     while not done:
+        action = act(q, params, obs)
         next_obs, reward, terminated, truncated, _ = env.step(action)
 
         td_error = reward + (discount * np.max(q[next_obs]) - q[obs, action])
@@ -44,7 +38,6 @@ def train_episode(policy: Policy, env: gym.Env):
 
         done = terminated or truncated
         obs = next_obs
-        action = act(policy, obs)
         rewards += reward
 
     return rewards
@@ -53,14 +46,19 @@ def train_episode(policy: Policy, env: gym.Env):
 def main():
     env = gym.make("CliffWalking-v0")
 
-    policy = create_policy(env.observation_space.n, env.action_space.n, 0.05, 0.5, 0.99)
+    params: HyperParams = {
+        'exploration': 0.1,
+        'discount': 0.99,
+        'learning_rate': 0.1
+    }
+    policy = create_policy(env.observation_space.n, env.action_space.n)
     for i in range(10000):
-        train_episode(policy, env)
+        train_episode(policy, params, env)
         if i % 100 == 99:
             print(i)
 
     env = gym.make("CliffWalking-v0", render_mode="human")
-    train_episode(policy, env)
+    train_episode(policy, params, env)
 
 
 if __name__ == '__main__':
