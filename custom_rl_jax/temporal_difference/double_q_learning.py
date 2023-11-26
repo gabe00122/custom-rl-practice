@@ -21,6 +21,10 @@ def act(q: np.ndarray, params: HyperParams, state: int) -> int:
         return np.argmax(q[state])
 
 
+def greedy_act(q: np.ndarray, params: HyperParams, state: int) -> int:
+    return np.argmax(q[state])
+
+
 def train_episode(policy: Policy, params: HyperParams, env: gym.Env):
     q1 = policy['Q1']
     q2 = policy['Q2']
@@ -38,13 +42,38 @@ def train_episode(policy: Policy, params: HyperParams, env: gym.Env):
         action = act(q1, params, obs)
         next_obs, reward, terminated, truncated, _ = env.step(action)
 
-        action_index = np.argmax(q1[next_obs])
-        td_error = reward + (discount * q2[next_obs, action_index] - q2[obs, action])
-        q2[obs, action] += learning_rate * td_error
+        action_index = np.argmax(q2[next_obs])
+        td_error = reward + (discount * q1[next_obs, action_index] - q1[obs, action])
+        q1[obs, action] += learning_rate * td_error
 
         done = terminated or truncated
         obs = next_obs
+        if np.random.uniform() > 0.5:
+            q1, q2 = q2, q1
+
+        rewards += reward
+
+    return rewards
+
+
+def eval_episode(policy: Policy, params: HyperParams, env: gym.Env):
+    q1 = policy['Q1']
+    q2 = policy['Q2']
+    if np.random.uniform() > 0.5:
         q1, q2 = q2, q1
+
+    rewards = 0
+    done = False
+
+    obs, _ = env.reset()
+
+    while not done:
+        action = greedy_act(q1, params, obs)
+        obs, reward, terminated, truncated, _ = env.step(action)
+
+        done = terminated or truncated
+        if np.random.uniform() > 0.5:
+            q1, q2 = q2, q1
 
         rewards += reward
 
@@ -58,7 +87,7 @@ def main():
 
     hyper_params: HyperParams = {
         'exploration': 0.1,
-        'discount': 0.99,
+        'discount': 0.90,
         'learning_rate': 0.1,
     }
 

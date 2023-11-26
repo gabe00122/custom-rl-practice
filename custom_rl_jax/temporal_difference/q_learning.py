@@ -20,6 +20,9 @@ def act(q: np.ndarray, params: HyperParams, state: int) -> int:
         return np.argmax(q[state])
 
 
+def greedy_act(q: np.ndarray, params: HyperParams, state: int) -> int:
+    return np.argmax(q[state])
+
 def train_episode(policy: Policy, params: HyperParams, env: gym.Env):
     rewards = 0
     q = policy['Q']
@@ -38,6 +41,23 @@ def train_episode(policy: Policy, params: HyperParams, env: gym.Env):
 
         done = terminated or truncated
         obs = next_obs
+        rewards += reward
+
+    return rewards
+
+
+def eval_episode(policy: Policy, params: HyperParams, env: gym.Env):
+    q = policy['Q']
+
+    rewards = 0
+    done = False
+
+    obs, _ = env.reset()
+
+    while not done:
+        action = greedy_act(q, params, obs)
+        obs, reward, terminated, truncated, _ = env.step(action)
+        done = terminated or truncated
         rewards += reward
 
     return rewards

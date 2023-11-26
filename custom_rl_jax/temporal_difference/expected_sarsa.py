@@ -51,7 +51,7 @@ def train_episode(policy: Policy, params: HyperParams, env: gym.Env):
 def main():
     env = gym.make("FrozenLake-v1")
     log_every = 100
-    reward_sum = 9
+    reward_sum = 0
 
     hyper_params: HyperParams = {
         'exploration': 0.1,
