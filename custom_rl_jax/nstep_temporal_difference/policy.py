@@ -30,7 +30,7 @@ class Policy(metaclass=ABCMeta):
         self.steps = params['steps']
         self.discount = params['discount']
         self.learning_rate = params['learning_rate']
-        self.q = np.random.rand(self.observation_space, self.action_space) * 0.05
+        self.q = np.ones((self.observation_space, self.action_space)) #np.random.rand(self.observation_space, self.action_space) * 0.05
 
     def act(self, observation: int) -> int:
         if np.random.uniform() > self.exploration:

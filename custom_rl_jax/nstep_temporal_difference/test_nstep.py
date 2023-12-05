@@ -9,27 +9,20 @@ from tree_backup import TreeBackup
 
 
 def main():
-    env = gym.make('FrozenLake-v1')
+    env = gym.make('FrozenLake-v1', render_mode="human")
+
+    data = {}
+    # for step in range(1, 5):
+    step = 5
     policy = TreeBackup({
         "action_space": env.action_space.n,
         "observation_space": env.observation_space.n,
         "discount": 0.99,
         "exploration": 0.05,
         "learning_rate": 0.1,
-        "steps": 2
+        "steps": step
     })
-
-    data = {}
-    for step in range(1, 5):
-        policy = TreeBackup({
-            "action_space": env.action_space.n,
-            "observation_space": env.observation_space.n,
-            "discount": 0.99,
-            "exploration": 0.05,
-            "learning_rate": 0.1,
-            "steps": step
-        })
-        data['steps-{}'.format(step)] = train(env, policy, 10000)
+    data['steps-{}'.format(step)] = train(env, policy, 10000)
 
     data = pd.DataFrame(data)
     data = data.rolling(100).mean()

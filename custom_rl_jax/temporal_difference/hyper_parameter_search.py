@@ -7,6 +7,7 @@ import expected_sarsa
 import sarsa
 import q_learning
 import double_q_learning
+from gymnasium.envs.toy_text.frozen_lake import generate_random_map
 
 
 def training_run(name: str, policy, train_fn, params: HyperParams, env: gym.Env, episodes: int) -> np.ndarray:
@@ -44,23 +45,23 @@ def training_run_eval(name: str, policy, train_fn, eval_fn, params: HyperParams,
 
 
 def main():
-    env = gym.make("FrozenLake-v1")
+    env = gym.make("FrozenLake-v1", desc=generate_random_map(11))
 
     state_space = env.observation_space.n
     action_space = env.action_space.n
 
     hyper_params: HyperParams = {
-        'exploration': 0.2,
+        'exploration': 0.05,
         'discount': 0.99,
-        'learning_rate': 0.2,
+        'learning_rate': 0.05,
     }
-    episodes = 30000
+    episodes = 300000
 
-    # s = training_run('sarsa', sarsa.create_policy(state_space, action_space), sarsa.train_episode, hyper_params, env,
-    #                  episodes)
-    # es = training_run('expected_sarsa', expected_sarsa.create_policy(state_space, action_space),
-    #                   expected_sarsa.train_episode,
-    #                   hyper_params, env, episodes)
+    s = training_run('sarsa', sarsa.create_policy(state_space, action_space), sarsa.train_episode, hyper_params, env,
+                     episodes)
+    es = training_run('expected_sarsa', expected_sarsa.create_policy(state_space, action_space),
+                      expected_sarsa.train_episode,
+                      hyper_params, env, episodes)
     q, greedy_q = training_run_eval('q_learning', q_learning.create_policy(state_space, action_space), q_learning.train_episode,
                           q_learning.eval_episode, hyper_params, env,
                           episodes)
@@ -69,8 +70,8 @@ def main():
                            hyper_params, env, episodes)
 
     df = pd.DataFrame({
-        # 'Sarsa': s,
-        # 'Expected Sarsa': es,
+        'Sarsa': s,
+        'Expected Sarsa': es,
         'Q learning': q,
         'Double Q Learning': dq,
         'Greedy Q learning': greedy_q,
