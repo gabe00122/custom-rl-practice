@@ -1,38 +1,12 @@
 import jax
 from jax import random, numpy as jnp
 import flax
-from flax import linen as nn
-from typing import Sequence
+from ..networks.mlp import Mlp
 import gymnasium as gym
 
 state_space = 4
 action_space = 2
 exploration = 0.01
-
-
-def mish(x: jnp.ndarray):
-    return x * jnp.tanh(nn.softplus(x))
-
-
-class Mlp(nn.Module):
-    features: Sequence[int]
-
-    @nn.compact
-    def __call__(self, inputs):
-        x = inputs
-        for i, feat in enumerate(self.features):
-            not_last_feat = i != len(self.features) - 1
-            initializer_scale = 1.0 if not_last_feat else 0.01
-
-            x = nn.Dense(
-                feat,
-                name=f'Layer {i}',
-                kernel_init=nn.initializers.variance_scaling(initializer_scale, 'fan_avg', 'uniform'),
-                bias_init=nn.initializers.constant(0.01)
-            )(x)
-            if not_last_feat:
-                x = mish(x)
-        return x
 
 
 seed = random.key(789796796789)
