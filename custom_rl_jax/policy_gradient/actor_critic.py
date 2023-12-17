@@ -3,7 +3,16 @@ from jax import numpy as jnp, random
 import flax.linen as nn
 import gymnasium as gym
 from typing import Any
-from .train import Metrics, HyperParams
+from typing_extensions import TypedDict
+from .types import Metrics
+
+Params = TypedDict("Params", {
+    'discount': float,
+    'actor_learning_rate': float,
+    'critic_learning_rate': float,
+    'actor_params': Any,
+    'critic_params': Any,
+})
 
 
 def actor_critic(actor_model: nn.Module, critic_model: nn.Module):
@@ -47,11 +56,12 @@ def actor_critic(actor_model: nn.Module, critic_model: nn.Module):
                             actor_params,
                             policy_gradient)
 
-    def train_episode(env: gym.Env, actor_params: dict[str, Any], critic_params: dict[str, Any],
-                      hyper_params: HyperParams, key: random.PRNGKey):
-        discount = hyper_params['discount']
-        actor_learning_rate = hyper_params['actor_learning_rate']
-        critic_learning_rate = hyper_params['critic_learning_rate']
+    def train_episode(params: Params, key: random.PRNGKey, env: gym.Env) -> tuple[Metrics, Params, random.PRNGKey]:
+        discount = params['discount']
+        actor_params = params['actor_params']
+        critic_params = params['critic_params']
+        actor_learning_rate = params['actor_learning_rate']
+        critic_learning_rate = params['critic_learning_rate']
 
         metrics: Metrics = {
             'td_error': 0,
@@ -94,6 +104,14 @@ def actor_critic(actor_model: nn.Module, critic_model: nn.Module):
             metrics['reward'] += reward
             metrics['length'] += 1
 
-        return actor_params, critic_params, key, metrics
+        output_params: Params = {
+            'discount': discount,
+            'critic_learning_rate': critic_learning_rate,
+            'actor_learning_rate': actor_learning_rate,
+            'actor_params': actor_params,
+            'critic_params': critic_params,
+        }
+
+        return metrics, output_params, key
 
     return train_episode, act

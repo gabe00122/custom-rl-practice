@@ -1,5 +1,4 @@
 import gymnasium as gym
-from typing_extensions import TypedDict
 from ..networks.mlp import Mlp
 from .actor_critic import actor_critic
 from jax import random, numpy as jnp
@@ -12,23 +11,9 @@ import orbax.checkpoint as ocp
 import json
 
 
-HyperParams = TypedDict('HyperParams', {
-    'discount': float,
-    'actor_learning_rate': float,
-    'critic_learning_rate': float,
-})
-
-Metrics = TypedDict('Metrics', {
-    'reward': float,
-    'length': int,
-    'state_value': float,
-    'td_error': float
-})
-
-
 def main():
     base_lr = 0.0002
-    hyper_params: HyperParams = {
+    hyper_params = {
         'discount': 0.99,
         'actor_learning_rate': base_lr,
         'critic_learning_rate': base_lr,
@@ -49,6 +34,11 @@ def main():
     key, actor_key, critic_key = random.split(key, 3)
     actor_params = actor_model.init(actor_key, state_vector)
     critic_params = critic_model.init(critic_key, state_vector)
+    params = {
+        **hyper_params,
+        'actor_params': actor_params,
+        'critic_params': critic_params,
+    }
 
     train_episode, _ = actor_critic(actor_model, critic_model)
 
@@ -61,9 +51,7 @@ def main():
         for episode in tepisode:
             tepisode.set_description(f"Episode {episode}")
 
-            actor_params, critic_params, key, metrics = train_episode(env, actor_params, critic_params,
-                                                                      hyper_params,
-                                                                      key)
+            metrics, params, key = train_episode(params, key, env)
             rewards[episode] = metrics['reward']
             state_values[episode] = metrics['state_value']
             td_errors[episode] = metrics['td_error']
