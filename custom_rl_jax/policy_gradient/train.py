@@ -1,6 +1,6 @@
 import gymnasium as gym
 from ..networks.mlp import Mlp
-from .actor_critic import actor_critic
+from .actor_critic_v2 import actor_critic_v2
 from jax import random, numpy as jnp
 import numpy as np
 import pandas as pd
@@ -16,10 +16,10 @@ def main():
     hyper_params = {
         'discount': 0.99,
         'actor_learning_rate': base_lr,
-        'critic_learning_rate': base_lr,
+        'critic_learning_rate': base_lr * 2,
     }
 
-    env_name = 'LunarLander-v2'
+    env_name = 'CartPole-v1'
     env = gym.make(env_name)
     action_space = env.action_space.n
     state_space = env.observation_space.shape[0]
@@ -40,7 +40,7 @@ def main():
         'critic_params': critic_params,
     }
 
-    train_episode, _ = actor_critic(actor_model, critic_model)
+    train_episode, _ = actor_critic_v2(actor_model, critic_model)
 
     total_episodes = 8000
     rewards = np.zeros((total_episodes,))
