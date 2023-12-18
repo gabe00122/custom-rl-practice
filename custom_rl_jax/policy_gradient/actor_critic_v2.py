@@ -1,18 +1,17 @@
 import jax
 from jax import numpy as jnp, random
 import flax.linen as nn
-import optax
 import gymnasium as gym
-from typing import Any
 from typing_extensions import TypedDict
 from .types import Metrics
 
+import optax
+from flax.training.train_state import TrainState
+
 Params = TypedDict("Params", {
     'discount': float,
-    'actor_learning_rate': float,
-    'critic_learning_rate': float,
-    'actor_params': Any,
-    'critic_params': Any,
+    'actor_training_state': TrainState,
+    'critic_training_state': TrainState,
 })
 
 actor_optimizer = optax.adam(0.0001)
@@ -42,9 +41,10 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
     grad_critic_loss = jax.grad(critic_loss)
 
     @jax.jit
-    def update_critic(critic_params, states: jnp.ndarray, expected_values: jnp.ndarray, critic_learning_rate: float):
+    def update_critic(critic_training_state: TrainState, states: jnp.ndarray, expected_values: jnp.ndarray):
+        critic_params = critic_training_state.params
         gradient = grad_critic_loss(critic_params, states, expected_values)
-        return jax.tree_map(lambda weight, grad: weight - grad * critic_learning_rate, critic_params, gradient)
+        return critic_training_state.apply_gradients(grads=gradient)
 
     @jax.jit
     def actor_loss(actor_params, states, actions, advantages):
@@ -54,19 +54,14 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
     grad_actor_loss = jax.grad(actor_loss)
 
     @jax.jit
-    def update_actor(actor_params, states, actions, advantages, learning_rate, i):
-        gradient = grad_actor_loss(actor_params, states, actions, advantages)
-        learning_rate * i
-        return jax.tree_map(lambda weight, grad: weight - grad * learning_rate,
-                            actor_params,
-                            gradient)
+    def update_actor(actor_training_state: TrainState, states, actions, advantages):
+        gradient = grad_actor_loss(actor_training_state.params, states, actions, advantages)
+        return actor_training_state.apply_gradients(grads=gradient)
 
     def train_episode(params: Params, key: random.PRNGKey, env: gym.Env) -> tuple[Metrics, Params, random.PRNGKey]:
         discount = params['discount']
-        actor_params = params['actor_params']
-        critic_params = params['critic_params']
-        actor_learning_rate = params['actor_learning_rate']
-        critic_learning_rate = params['critic_learning_rate']
+        actor_training_state = params['actor_training_state']
+        critic_training_state = params['critic_training_state']
 
         metrics: Metrics = {
             'td_error': 0,
@@ -85,21 +80,21 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
         while not done:
             key, action_key = random.split(key)
 
-            action = act(actor_params, obs, action_key)
+            action = act(actor_training_state.params, obs, action_key)
 
             next_obs, reward, terminated, truncated, info = env.step(action.item())
             # reward = reward / 500
             done = terminated or truncated
 
-            s_value = state_value(critic_params, obs)
+            s_value = state_value(critic_training_state.params, obs)
             expected_values = reward
             if not done:
-                expected_values += discount * state_value(critic_params, next_obs)
+                expected_values += discount * state_value(critic_training_state.params, next_obs)
 
             td_error = expected_values - s_value
 
-            critic_params = update_critic(critic_params, obs, expected_values, critic_learning_rate)
-            actor_params = update_actor(actor_params, obs, action, td_error, actor_learning_rate, i)
+            critic_training_state = update_critic(critic_training_state, obs, expected_values)
+            actor_training_state = update_actor(actor_training_state, obs, action, td_error * i)
 
             i *= discount
             obs = next_obs
@@ -113,10 +108,8 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
 
         output_params: Params = {
             'discount': discount,
-            'critic_learning_rate': critic_learning_rate,
-            'actor_learning_rate': actor_learning_rate,
-            'actor_params': actor_params,
-            'critic_params': critic_params,
+            'actor_training_state': actor_training_state,
+            'critic_training_state': critic_training_state,
         }
 
         return metrics, output_params, key

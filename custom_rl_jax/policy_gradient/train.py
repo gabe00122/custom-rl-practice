@@ -10,14 +10,12 @@ import shutil
 import orbax.checkpoint as ocp
 import json
 
+from flax.training.train_state import TrainState
+import optax
+
 
 def main():
     base_lr = 0.0002
-    hyper_params = {
-        'discount': 0.99,
-        'actor_learning_rate': base_lr,
-        'critic_learning_rate': base_lr * 2,
-    }
 
     env_name = 'CartPole-v1'
     env = gym.make(env_name)
@@ -35,14 +33,16 @@ def main():
     actor_params = actor_model.init(actor_key, state_vector)
     critic_params = critic_model.init(critic_key, state_vector)
     params = {
-        **hyper_params,
-        'actor_params': actor_params,
-        'critic_params': critic_params,
+        'discount': 0.99,
+        'actor_training_state': TrainState.create(apply_fn=actor_model.apply, params=actor_params,
+                                                  tx=optax.adam(optax.linear_schedule(0.0007 * 0.9, 0.00001 * 0.9, 30000))),
+        'critic_training_state': TrainState.create(apply_fn=critic_model.apply, params=critic_params,
+                                                   tx=optax.adam(optax.linear_schedule(0.0007, 0.00001, 30000))),
     }
 
     train_episode, _ = actor_critic_v2(actor_model, critic_model)
 
-    total_episodes = 8000
+    total_episodes = 3000
     rewards = np.zeros((total_episodes,))
     state_values = np.zeros((total_episodes,))
     td_errors = np.zeros((total_episodes,))
@@ -60,9 +60,9 @@ def main():
 
     # write hyperparameters
     run_path = Path("./run").absolute()
-    serialized_params = json.dumps(hyper_params)
-    with open(run_path / "params.json", 'w') as file:
-        file.write(serialized_params)
+    # serialized_params = json.dumps(hyper_params)
+    # with open(run_path / "params.json", 'w') as file:
+    #     file.write(serialized_params)
 
     # save model
     checkpoint_path = Path(run_path)
@@ -70,10 +70,6 @@ def main():
         shutil.rmtree(checkpoint_path)
     checkpoint_path.mkdir(parents=True, exist_ok=True)
 
-    params = {
-        'actor': actor_params,
-        'critic': critic_params,
-    }
     checkpointer = ocp.PyTreeCheckpointer()
     checkpointer.save(checkpoint_path / "checkpoint", params)
 
