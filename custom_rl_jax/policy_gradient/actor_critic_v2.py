@@ -18,6 +18,12 @@ actor_optimizer = optax.adam(0.0001)
 critic_optimizer = optax.adam(0.0001)
 
 
+def mul_exp(x, logp):
+    p = jnp.exp(logp)
+    x = jnp.where(p == 0, 0.0, x)
+    return x * p
+
+
 def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
     @jax.jit
     def act(actor_params, state: jnp.ndarray, key: random.PRNGKey) -> jnp.ndarray:
@@ -25,9 +31,9 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
         return random.categorical(key, logits)
 
     @jax.jit
-    def action_prob(actor_params, state: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
+    def action_prob(actor_params, state: jnp.ndarray) -> jnp.ndarray:
         logits = actor_model.apply(actor_params, state)
-        return nn.softmax(logits)[action]
+        return nn.log_softmax(logits)
 
     @jax.jit
     def state_value(critic_params, state: jnp.ndarray) -> jnp.ndarray:
@@ -36,7 +42,12 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
     @jax.jit
     def critic_loss(critic_params, states: jnp.ndarray, expected_values: jnp.ndarray) -> jnp.ndarray:
         critic_values = critic_model.apply(critic_params, states)
-        return ((expected_values - critic_values) ** 2).mean()
+        loss = ((expected_values - critic_values) ** 2).mean()
+        loss += sum(
+            l2_loss(w, alpha=0.0001)
+            for w in jax.tree_leaves(critic_params)
+        )
+        return loss
 
     grad_critic_loss = jax.grad(critic_loss)
 
@@ -46,10 +57,20 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
         gradient = grad_critic_loss(critic_params, states, expected_values)
         return critic_training_state.apply_gradients(grads=gradient)
 
+    def l2_loss(x, alpha):
+        return alpha * (x ** 2).mean()
+
     @jax.jit
     def actor_loss(actor_params, states, actions, advantages):
-        action_probs = action_prob(actor_params, states, actions)
-        return -jnp.mean(jnp.log(action_probs) * advantages)
+        action_probs = action_prob(actor_params, states)
+        entropy_loss = jnp.mean(jnp.sum(mul_exp(action_probs, action_probs), axis=-1))
+
+        loss = -jnp.mean(action_probs[actions] * advantages) + 0.001 * entropy_loss
+        loss += sum(
+            l2_loss(w, alpha=0.0001)
+            for w in jax.tree_leaves(actor_params)
+        )
+        return loss
 
     grad_actor_loss = jax.grad(actor_loss)
 

@@ -20,7 +20,7 @@ def main():
     cp_path = Path('./run/checkpoint').absolute()
     orbax_checkpointer = ocp.PyTreeCheckpointer()
     raw_restored = orbax_checkpointer.restore(cp_path)
-    actor_params = raw_restored['actor']
+    actor_params = raw_restored['actor_training_state']['params']
     #critic_params = raw_restored['critic']
 
     key = random.PRNGKey(42)

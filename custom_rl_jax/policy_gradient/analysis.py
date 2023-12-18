@@ -27,7 +27,7 @@ data_frame = pd.read_csv(runs / "log.cvs")
 #     all_rewards[i] = data_frame['rewards']
     #rewards = data_frame['rewards']
 
-data_frame = data_frame.rolling(window=10).mean()
+data_frame = data_frame.rolling(window=100).mean()
 #sns.heatmap(all_rewards)
 data_frame.plot.line()
 plt.show()

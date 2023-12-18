@@ -15,9 +15,7 @@ import optax
 
 
 def main():
-    base_lr = 0.0002
-
-    env_name = 'CartPole-v1'
+    env_name = 'LunarLander-v2'
     env = gym.make(env_name)
     action_space = env.action_space.n
     state_space = env.observation_space.shape[0]
@@ -32,17 +30,22 @@ def main():
     key, actor_key, critic_key = random.split(key, 3)
     actor_params = actor_model.init(actor_key, state_vector)
     critic_params = critic_model.init(critic_key, state_vector)
+
+    beta = 0.999
+    # optax.adam(0.00035, b1=beta, b2=beta, eps=1e-5))
     params = {
         'discount': 0.99,
         'actor_training_state': TrainState.create(apply_fn=actor_model.apply, params=actor_params,
-                                                  tx=optax.adam(optax.linear_schedule(0.0007 * 0.9, 0.00001 * 0.9, 30000))),
+                                                  tx=optax.adam(0.00001,
+                                                                b1=beta, b2=beta, eps=1e-5)),
         'critic_training_state': TrainState.create(apply_fn=critic_model.apply, params=critic_params,
-                                                   tx=optax.adam(optax.linear_schedule(0.0007, 0.00001, 30000))),
+                                                   tx=optax.adam(0.0001, b1=beta,
+                                                                 b2=beta, eps=1e-5)),
     }
 
     train_episode, _ = actor_critic_v2(actor_model, critic_model)
 
-    total_episodes = 3000
+    total_episodes = 8000
     rewards = np.zeros((total_episodes,))
     state_values = np.zeros((total_episodes,))
     td_errors = np.zeros((total_episodes,))
@@ -56,7 +59,7 @@ def main():
             state_values[episode] = metrics['state_value']
             td_errors[episode] = metrics['td_error']
 
-            tepisode.set_postfix(reward=metrics['reward'], state=metrics['state_value'])
+            tepisode.set_postfix(reward=metrics['reward'], state=round(metrics['state_value']))
 
     # write hyperparameters
     run_path = Path("./run").absolute()
