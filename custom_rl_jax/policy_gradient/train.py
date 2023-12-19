@@ -31,21 +31,21 @@ def main():
     actor_params = actor_model.init(actor_key, state_vector)
     critic_params = critic_model.init(critic_key, state_vector)
 
-    beta = 0.999
+    beta = 0.99
     # optax.adam(0.00035, b1=beta, b2=beta, eps=1e-5))
     params = {
         'discount': 0.99,
         'actor_training_state': TrainState.create(apply_fn=actor_model.apply, params=actor_params,
-                                                  tx=optax.adam(0.00001,
+                                                  tx=optax.adam(0.00025,
                                                                 b1=beta, b2=beta, eps=1e-5)),
         'critic_training_state': TrainState.create(apply_fn=critic_model.apply, params=critic_params,
-                                                   tx=optax.adam(0.0001, b1=beta,
+                                                   tx=optax.adam(0.001, b1=beta,
                                                                  b2=beta, eps=1e-5)),
     }
 
     train_episode, _ = actor_critic_v2(actor_model, critic_model)
 
-    total_episodes = 8000
+    total_episodes = 4000
     rewards = np.zeros((total_episodes,))
     state_values = np.zeros((total_episodes,))
     td_errors = np.zeros((total_episodes,))

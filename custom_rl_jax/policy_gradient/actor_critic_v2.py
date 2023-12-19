@@ -79,6 +79,20 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
         gradient = grad_actor_loss(actor_training_state.params, states, actions, advantages)
         return actor_training_state.apply_gradients(grads=gradient)
 
+    @jax.jit
+    def one_step(actor_training_state, critic_training_state, obs, next_obs, action, reward, discount, i, done):
+        s_value = state_value(critic_training_state.params, obs)
+        expected_values = jnp.where(done,
+                                         reward,
+                                         reward + discount * state_value(critic_training_state.params, next_obs),
+                                         )
+
+        td_error = expected_values - s_value
+
+        critic_training_state = update_critic(critic_training_state, obs, expected_values)
+        actor_training_state = update_actor(actor_training_state, obs, action, td_error * i)
+        return actor_training_state, critic_training_state
+
     def train_episode(params: Params, key: random.PRNGKey, env: gym.Env) -> tuple[Metrics, Params, random.PRNGKey]:
         discount = params['discount']
         actor_training_state = params['actor_training_state']
@@ -107,23 +121,25 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
             # reward = reward / 500
             done = terminated or truncated
 
-            s_value = state_value(critic_training_state.params, obs)
-            expected_values = reward
-            if not done:
-                expected_values += discount * state_value(critic_training_state.params, next_obs)
-
-            td_error = expected_values - s_value
-
-            critic_training_state = update_critic(critic_training_state, obs, expected_values)
-            actor_training_state = update_actor(actor_training_state, obs, action, td_error * i)
+            actor_training_state, critic_training_state = one_step(
+                actor_training_state,
+                critic_training_state,
+                obs,
+                next_obs,
+                action,
+                reward,
+                discount,
+                i,
+                done
+            )
 
             i *= discount
             obs = next_obs
 
             if not has_state:
-                metrics['state_value'] = s_value
+                # metrics['state_value'] = s_value
                 has_state = True
-            metrics['td_error'] += td_error
+            # metrics['td_error'] += td_error
             metrics['reward'] += reward
             metrics['length'] += 1
 
