@@ -21,29 +21,32 @@ def mul_exp(x, logp):
     return x * p
 
 
-def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
+def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_count: int):
+
     @jax.jit
-    def act(actor_params, state: ArrayLike, key: ArrayLike) -> Array:
-        logits = actor_model.apply(actor_params, state)
+    def vectorized_act(actor_params, obs: ArrayLike, key: random.KeyArray) -> tuple[Array, random.KeyArray]:
+        keys = random.split(key, vectorized_count + 1)
+        actions = jax.vmap(act, in_axes=(None, 0, 0), out_axes=0)(actor_params, obs, keys[:-1])
+        return actions, keys[-1]
+
+    @jax.jit
+    def act(actor_params, obs: ArrayLike, key: random.KeyArray) -> Array:
+        logits = actor_model.apply(actor_params, obs)
         return random.categorical(key, logits)
 
     @jax.jit
-    def action_prob(actor_params, state: ArrayLike) -> Array:
-        logits = actor_model.apply(actor_params, state)
+    def action_prob(actor_params, obs: ArrayLike) -> Array:
+        logits = actor_model.apply(actor_params, obs)
         return nn.log_softmax(logits)
 
     @jax.jit
-    def state_value(critic_params, state: ArrayLike) -> Array:
-        return critic_model.apply(critic_params, state).reshape(())
+    def state_value(critic_params, obs: ArrayLike) -> Array:
+        return critic_model.apply(critic_params, obs).reshape(())
 
     @jax.jit
-    def critic_loss(critic_params, states: ArrayLike, expected_values: ArrayLike) -> Array:
-        critic_values = critic_model.apply(critic_params, states)
+    def critic_loss(critic_params, obs: ArrayLike, expected_values: ArrayLike) -> Array:
+        critic_values = critic_model.apply(critic_params, obs)
         loss = ((expected_values - critic_values) ** 2).mean()
-        # loss += sum(
-        #     l2_loss(w, alpha=0.0001)
-        #     for w in jax.tree_leaves(critic_params)
-        # )
         return loss
 
     grad_critic_loss = jax.grad(critic_loss)
@@ -87,6 +90,9 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
         critic_training_state = update_critic(critic_training_state, obs, expected_values)
         actor_training_state = update_actor(actor_training_state, obs, action, td_error * i)
         return actor_training_state, critic_training_state
+
+    def vectorized_train_step(params: Params, obs, reward, terminated, truncated, info) -> tuple[Metrics, Params, random.PRNGKey]:
+        pass
 
     def train_episode(params: Params, key: random.PRNGKey, env: gym.Env) -> tuple[Metrics, Params, random.PRNGKey]:
         discount = params['discount']
@@ -146,4 +152,4 @@ def actor_critic_v2(actor_model: nn.Module, critic_model: nn.Module):
 
         return metrics, output_params, key
 
-    return train_episode, act
+    return train_episode, act, vectorized_act
