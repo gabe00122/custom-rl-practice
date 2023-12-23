@@ -2,9 +2,7 @@ import jax
 from jax.typing import ArrayLike
 from jax import numpy as jnp, random, Array
 import flax.linen as nn
-import gymnasium as gym
 from typing_extensions import TypedDict
-from .types import Metrics
 
 from flax.training.train_state import TrainState
 
@@ -15,14 +13,7 @@ Params = TypedDict("Params", {
 })
 
 
-def mul_exp(x, logp):
-    p = jnp.exp(logp)
-    x = jnp.where(p == 0, 0.0, x)
-    return x * p
-
-
 def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_count: int):
-
     @jax.jit
     def vectorized_act(actor_params, obs: ArrayLike, key: random.KeyArray) -> tuple[Array, random.KeyArray]:
         keys = random.split(key, vectorized_count + 1)
@@ -35,9 +26,9 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_
         return random.categorical(key, logits)
 
     @jax.jit
-    def action_prob(actor_params, obs: ArrayLike) -> Array:
+    def action_prob(actor_params, obs: ArrayLike, action: ArrayLike) -> Array:
         logits = actor_model.apply(actor_params, obs)
-        return nn.log_softmax(logits)
+        return nn.log_softmax(logits)[action]
 
     @jax.jit
     def state_value(critic_params, obs: ArrayLike) -> Array:
@@ -45,16 +36,14 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_
 
     @jax.jit
     def critic_loss(critic_params, obs: ArrayLike, expected_values: ArrayLike) -> Array:
-        critic_values = critic_model.apply(critic_params, obs)
+        critic_values = jax.vmap(critic_model.apply, (None, 0))(critic_params, obs)
         loss = ((expected_values - critic_values) ** 2).mean()
         return loss
 
-    grad_critic_loss = jax.grad(critic_loss)
-
     @jax.jit
-    def update_critic(critic_training_state: TrainState, states: ArrayLike, expected_values: ArrayLike):
+    def update_critic(critic_training_state: TrainState, obs: ArrayLike, expected_values: ArrayLike):
         critic_params = critic_training_state.params
-        gradient = grad_critic_loss(critic_params, states, expected_values)
+        gradient = jax.grad(critic_loss)(critic_params, obs, expected_values)
         return critic_training_state.apply_gradients(grads=gradient)
 
     def l2_loss(x, alpha):
@@ -62,94 +51,50 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_
 
     @jax.jit
     def actor_loss(actor_params, states, actions, advantages):
-        action_probs = action_prob(actor_params, states)
+        action_probs = jax.vmap(action_prob, (None, 0, 0))(actor_params, states, actions)
 
-        loss = -jnp.mean(action_probs[actions] * advantages)
+        loss = -jnp.mean(action_probs * advantages)
         loss += sum(
             l2_loss(w, alpha=0.0001)
             for w in jax.tree_leaves(actor_params)
         )
         return loss
 
-    grad_actor_loss = jax.grad(actor_loss)
-
     @jax.jit
     def update_actor(actor_training_state: TrainState, states, actions, advantages):
-        gradient = grad_actor_loss(actor_training_state.params, states, actions, advantages)
+        gradient = jax.grad(actor_loss)(actor_training_state.params, states, actions, advantages)
         return actor_training_state.apply_gradients(grads=gradient)
 
     @jax.jit
-    def one_step(actor_training_state, critic_training_state, obs, next_obs, action, reward, discount, i, done):
+    def vectorized_train_step(params: Params, obs: ArrayLike, action: ArrayLike, next_obs: ArrayLike, reward: ArrayLike,
+                              done: ArrayLike, importance: ArrayLike) -> tuple[Params, Array]:
+        discount = params['discount']
+        critic_training_state = params['critic_training_state']
+        critic_params = critic_training_state.params
+        actor_training_state = params['actor_training_state']
+        # actor_params = actor_training_state.params
 
-        s_value = state_value(critic_training_state.params, obs)
-        expected_values = jnp.select(done, reward,
-                                    reward + discount * state_value(critic_training_state.params, next_obs))
+        v_state_value = jax.vmap(state_value, (None, 0))
 
-        td_error = expected_values - s_value
+        expected_values = v_state_value(critic_params, obs)
+        target_expected_values = jnp.select(done,
+                                            reward,
+                                            reward + discount * v_state_value(critic_params, next_obs))
+
+        advantages = target_expected_values - expected_values
+        advantages *= importance
 
         critic_training_state = update_critic(critic_training_state, obs, expected_values)
-        actor_training_state = update_actor(actor_training_state, obs, action, td_error * i)
-        return actor_training_state, critic_training_state
+        actor_training_state = update_actor(actor_training_state, obs, action, advantages)
 
-    def vectorized_train_step(params: Params, obs, reward, terminated, truncated, info) -> tuple[Metrics, Params, random.PRNGKey]:
-        pass
-
-    def train_episode(params: Params, key: random.PRNGKey, env: gym.Env) -> tuple[Metrics, Params, random.PRNGKey]:
-        discount = params['discount']
-        actor_training_state = params['actor_training_state']
-        critic_training_state = params['critic_training_state']
-
-        metrics: Metrics = {
-            'td_error': 0,
-            'state_value': 0,
-            'reward': 0,
-            'length': 0
-        }
-        has_state = False
-
-        obs, info = env.reset()
-
-        done = False
-
-        i = 1.0
-
-        while not done:
-            key, action_key = random.split(key)
-
-            action = act(actor_training_state.params, obs, action_key)
-
-            next_obs, reward, terminated, truncated, info = env.step(action.item())
-            # reward = reward / 500
-            done = terminated or truncated
-
-            actor_training_state, critic_training_state = one_step(
-                actor_training_state,
-                critic_training_state,
-                obs,
-                next_obs,
-                action,
-                jnp.array([reward]),
-                discount,
-                i,
-                jnp.array([done]),
-            )
-
-            i *= discount
-            obs = next_obs
-
-            if not has_state:
-                # metrics['state_value'] = s_value
-                has_state = True
-            # metrics['td_error'] += td_error
-            metrics['reward'] += reward
-            metrics['length'] += 1
-
+        # set the importance back to 1 if it's the end of an episode
+        importance *= discount
+        importance = jnp.maximum(importance, done)
         output_params: Params = {
             'discount': discount,
-            'actor_training_state': actor_training_state,
             'critic_training_state': critic_training_state,
+            'actor_training_state': actor_training_state,
         }
+        return output_params, importance
 
-        return metrics, output_params, key
-
-    return train_episode, act, vectorized_act
+    return vectorized_train_step, vectorized_act, act

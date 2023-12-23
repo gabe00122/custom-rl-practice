@@ -2,20 +2,17 @@ import gymnasium as gym
 from ..networks.mlp import Mlp
 from ..policy_gradient.actor_critic_v3 import actor_critic_v3
 from jax import random, numpy as jnp
+import numpy as np
 
 from tqdm import tqdm
-from pathlib import Path
-import shutil
-import orbax.checkpoint as ocp
-
 from flax.training.train_state import TrainState
 import optax
 
 
 def main():
     env_name = 'CartPole-v1'
-    num_envs = 8
-    env = gym.make_vec(env_name, num_envs=num_envs)
+    num_envs = 128
+    env = gym.make_vec(env_name, num_envs=num_envs, vectorization_mode="sync")
     action_space = env.single_action_space.n
     state_space = env.single_observation_space.shape[0]
 
@@ -30,7 +27,7 @@ def main():
     actor_params = actor_model.init(actor_key, state_vector)
     critic_params = critic_model.init(critic_key, state_vector)
 
-    beta = 0.99
+    beta = 0.997
     params = {
         'discount': 0.999,
         'actor_training_state': TrainState.create(apply_fn=actor_model.apply, params=actor_params,
@@ -41,28 +38,48 @@ def main():
                                                                  b2=beta)),
     }
 
-    train_episode, act, vectorized_act = actor_critic_v3(actor_model, critic_model, num_envs)
+    vectorized_train_step, vectorized_act, act = actor_critic_v3(actor_model, critic_model, num_envs)
 
-    total_episodes = 4000
+    total_steps = 1_000_000
 
     obs, info = env.reset(seed=42)
+    obs = jnp.array(obs, dtype=jnp.float32)
 
-    with tqdm(range(total_episodes), unit='episode') as tepisode:
-        for episode in tepisode:
-            tepisode.set_description(f"Episode {episode}")
+    actions, key = vectorized_act(actor_params, obs, key)
+    importance = jnp.ones((num_envs,))
 
-            vectorized_act, key = vectorized_act(actor_params, obs, key)
-            print(vectorized_act)
+    with tqdm(range(total_steps), unit='steps') as tsteps:
+        for step in tsteps:
+            tsteps.set_description(f"Step {step}")
 
-            obs, reward, terminated, truncated, info = env.step(vectorized_act)
+            next_obs, reward, terminated, truncated, info = env.step(np.array(actions))
+            next_obs = jnp.array(next_obs, dtype=jnp.float32)
+
+            done = np.logical_or(terminated, truncated)
+            params, importance = vectorized_train_step(params, obs, actions, next_obs, reward, done, importance)
+
+            obs = next_obs
+            actions, key = vectorized_act(actor_params, obs, key)
 
             # metrics, params, key = train_episode(params, key, env)
             # rewards[episode] = metrics['reward']
             # state_values[episode] = metrics['state_value']
             # td_errors[episode] = metrics['td_error']
 
-            # tepisode.set_postfix(reward=metrics['reward'], state=round(metrics['state_value']))
+            tsteps.set_postfix(reward=np.mean(reward))
 
+    # let's see it in action
+    actor_params = params['actor_training_state'].params
+    env = gym.make('CartPole-v1', render_mode='human')
+
+    for _ in range(10):
+        obs, _ = env.reset()
+        done = False
+        while not done:
+            key, act_key = random.split(key)
+            action = act(actor_params, obs, act_key)
+            obs, _, truncated, terminated, _ = env.step(action.item())
+            done = truncated or terminated
 
 
 if __name__ == "__main__":
