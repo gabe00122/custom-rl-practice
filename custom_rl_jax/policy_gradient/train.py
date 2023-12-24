@@ -15,7 +15,7 @@ import optax
 
 
 def main():
-    env_name = 'LunarLander-v2'
+    env_name = 'CartPole-v1'
     env = gym.make(env_name)
     action_space = env.action_space.n
     state_space = env.observation_space.shape[0]

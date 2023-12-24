@@ -1,3 +1,5 @@
+import math
+
 import gymnasium as gym
 from ..networks.mlp import Mlp
 from ..policy_gradient.actor_critic_v3 import actor_critic_v3
@@ -11,7 +13,7 @@ import optax
 
 def main():
     env_name = 'CartPole-v1'
-    num_envs = 128
+    num_envs = 4
     env = gym.make_vec(env_name, num_envs=num_envs, vectorization_mode="sync")
     action_space = env.single_action_space.n
     state_space = env.single_observation_space.shape[0]
@@ -27,26 +29,30 @@ def main():
     actor_params = actor_model.init(actor_key, state_vector)
     critic_params = critic_model.init(critic_key, state_vector)
 
-    beta = 0.997
+    beta = 0.99
     params = {
-        'discount': 0.999,
+        'discount': 0.99,
         'actor_training_state': TrainState.create(apply_fn=actor_model.apply, params=actor_params,
                                                   tx=optax.adam(0.00025,
                                                                 b1=beta, b2=beta)),
         'critic_training_state': TrainState.create(apply_fn=critic_model.apply, params=critic_params,
-                                                   tx=optax.adam(0.001, b1=beta,
+                                                   tx=optax.adam(0.0005, b1=beta,
                                                                  b2=beta)),
     }
 
     vectorized_train_step, vectorized_act, act = actor_critic_v3(actor_model, critic_model, num_envs)
 
-    total_steps = 1_000_000
+    total_steps = 40000
 
     obs, info = env.reset(seed=42)
-    obs = jnp.array(obs, dtype=jnp.float32)
+    obs = jnp.array(obs)
 
     actions, key = vectorized_act(actor_params, obs, key)
     importance = jnp.ones((num_envs,))
+
+    # metrics
+    episode_rewards = np.zeros((num_envs,))
+    episode_zeros = np.zeros((num_envs,))
 
     with tqdm(range(total_steps), unit='steps') as tsteps:
         for step in tsteps:
@@ -56,17 +62,22 @@ def main():
             next_obs = jnp.array(next_obs, dtype=jnp.float32)
 
             done = np.logical_or(terminated, truncated)
-            params, importance = vectorized_train_step(params, obs, actions, next_obs, reward, done, importance)
+            params, importance, actions, key, metrics = vectorized_train_step(params, obs, actions, next_obs, reward,
+                                                                              done, importance, key)
 
             obs = next_obs
-            actions, key = vectorized_act(actor_params, obs, key)
 
+            episode_rewards += reward
+            tsteps.set_postfix(reward=np.mean(episode_rewards).item(),
+                               td_error=metrics['td_error'].item(),
+                               )
+
+            episode_rewards = np.where(done, episode_zeros, episode_rewards)
             # metrics, params, key = train_episode(params, key, env)
             # rewards[episode] = metrics['reward']
             # state_values[episode] = metrics['state_value']
             # td_errors[episode] = metrics['td_error']
-
-            tsteps.set_postfix(reward=np.mean(reward))
+            # print(np.mean(episode_rewards))
 
     # let's see it in action
     actor_params = params['actor_training_state'].params
