@@ -36,19 +36,23 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module):
 
     def action_log_prob(actor_params, obs: ArrayLike, action: ArrayLike) -> Array:
         logits = actor_model.apply(actor_params, obs)
-        return nn.log_softmax(logits)[action]
+        return jnp.log(nn.softmax(logits)[action])
 
     def state_value(critic_params, obs: ArrayLike) -> Array:
-        return critic_model.apply(critic_params, obs).reshape(())
+        return critic_model.apply(critic_params, obs)
 
     def critic_loss(critic_params, obs: ArrayLike, expected_values: ArrayLike) -> Array:
-        critic_values = jax.vmap(critic_model.apply, (None, 0))(critic_params, obs)
+        critic_values = jax.vmap(state_value, (None, 0))(critic_params, obs).flatten()
+        # jax.debug.print("critic_values: {}", critic_values)
+        # jax.debug.print("expected_values: {}", expected_values)
+        # jax.debug.print("critic_values - expected_values: {}", critic_values - expected_values)
+        # jax.debug.print("(critic_values - expected_values) ** 2: {}", (critic_values - expected_values) ** 2)
 
         loss = ((expected_values - critic_values) ** 2).mean()
-        loss += l2_regularization(critic_params, alpha=0.0001)
-        return loss * 0.5
+        # jax.debug.print("loss: {}", loss)
+        # loss += l2_regularization(critic_params, alpha=0.001)
+        return loss
 
-    # @jax.jit
     def update_critic(critic_training_state: TrainState, obs: ArrayLike, expected_values: ArrayLike):
         critic_params = critic_training_state.params
         loss, gradient = jax.value_and_grad(critic_loss)(critic_params, obs, expected_values)
@@ -56,6 +60,7 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module):
 
     def actor_loss(actor_params, states, actions, advantages):
         action_probs = jax.vmap(action_log_prob, (None, 0, 0))(actor_params, states, actions)
+        #jax.debug.print("action_probs: {}", action_probs)
 
         loss = -jnp.mean(action_probs * advantages)
         loss += l2_regularization(actor_params, alpha=0.0001)
@@ -72,17 +77,21 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module):
         critic_training_state = params['critic_training_state']
         critic_params = critic_training_state.params
         actor_training_state = params['actor_training_state']
-        actor_params = actor_training_state.params
 
         v_state_value = jax.vmap(state_value, (None, 0))
 
-        expected_values = v_state_value(critic_params, obs)
+        expected_values = v_state_value(critic_params, obs).flatten()
+        #jax.debug.print("expected_values: {}", expected_values)
+
         next_expected_values = jnp.where(done,
                                          rewards,
-                                         rewards + discount * v_state_value(critic_params, next_obs))
+                                         rewards + discount * v_state_value(critic_params, next_obs).flatten())
+        #jax.debug.print("next_expected_values: {}", next_expected_values)
 
         advantages = next_expected_values - expected_values
         advantages *= importance
+        #jax.debug.print("advantages: {}", advantages)
+        #jax.debug.print("importance: {}", importance)
 
         critic_training_state, c_loss = update_critic(critic_training_state, obs, next_expected_values)
         actor_training_state, a_loss = update_actor(actor_training_state, obs, action, advantages)
@@ -95,7 +104,7 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module):
             'critic_training_state': critic_training_state,
             'actor_training_state': actor_training_state,
         }
-        actions, key = vectorized_act(actor_params, next_obs, key)
+        actions, key = vectorized_act(actor_training_state.params, next_obs, key)
 
         metrics: Metrics = {
             'actor_loss': a_loss,

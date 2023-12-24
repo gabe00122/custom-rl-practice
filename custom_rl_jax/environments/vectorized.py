@@ -1,3 +1,5 @@
+import math
+
 import gymnasium as gym
 from ..networks.mlp import Mlp
 from ..policy_gradient.actor_critic_v3 import actor_critic_v3
@@ -12,8 +14,8 @@ import optax
 
 
 def main():
-    env_name = 'CartPole-v1'
-    num_envs = 4
+    env_name = 'LunarLander-v2'
+    num_envs = 16
     env = gym.make_vec(env_name, num_envs=num_envs, vectorization_mode="sync")
     action_space = env.single_action_space.n
     state_space = env.single_observation_space.shape[0]
@@ -21,7 +23,7 @@ def main():
     key = random.PRNGKey(53245)
 
     actor_model = Mlp(features=[64, 64, action_space], last_layer_scale=0.01)
-    critic_model = Mlp(features=[64, 64, 1], last_layer_scale=0.1)
+    critic_model = Mlp(features=[64, 64, 1], last_layer_scale=0.5)
 
     state_vector = jnp.zeros((state_space,), dtype=jnp.float32)
 
@@ -33,16 +35,16 @@ def main():
     params = {
         'discount': 0.999,
         'actor_training_state': TrainState.create(apply_fn=actor_model.apply, params=actor_params,
-                                                  tx=optax.adam(0.00025 * 8,
+                                                  tx=optax.adam(0.00025,
                                                                 b1=beta, b2=beta)),
         'critic_training_state': TrainState.create(apply_fn=critic_model.apply, params=critic_params,
-                                                   tx=optax.adam(0.0005 * 8, b1=beta,
+                                                   tx=optax.adam(0.001, b1=beta,
                                                                  b2=beta)),
     }
 
     vectorized_train_step, vectorized_act, act = actor_critic_v3(actor_model, critic_model)
 
-    total_steps = 40000
+    total_steps = 80000 * 2
 
     obs, info = env.reset(seed=42)
     obs = jnp.array(obs)
@@ -68,7 +70,7 @@ def main():
             tsteps.set_description(f"Step {step}")
 
             next_obs, reward, terminated, truncated, info = env.step(np.array(actions))
-            reward /= max_discounted_reward
+            # reward /= max_discounted_reward
             next_obs = jnp.array(next_obs, dtype=jnp.float32)
 
             done = np.logical_or(terminated, truncated)
@@ -94,7 +96,7 @@ def main():
 
     # let's see it in action
     actor_params = params['actor_training_state'].params
-    env = gym.make('CartPole-v1', render_mode='human')
+    env = gym.make(env_name, render_mode='human')
 
     for _ in range(10):
         obs, _ = env.reset()
@@ -112,7 +114,7 @@ def main():
         'actor_loss': actor_loss,
         'critic_loss': critic_loss,
     })
-    dataframe.to_csv('results.csv')
+    #dataframe.to_csv('results.csv')
     dataframe.rolling(1000).mean().plot()
     plt.show()
 
