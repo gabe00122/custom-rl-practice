@@ -20,32 +20,33 @@ Metrics = TypedDict("Metrics", {
 })
 
 
-def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_count: int):
-    # @jax.jit
+def l2_regularization(params, alpha):
+    return alpha * sum(alpha * (p ** 2).mean() for p in jax.tree_leaves(params))
+
+
+def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module):
     def vectorized_act(actor_params, obs: ArrayLike, key: random.KeyArray) -> tuple[Array, random.KeyArray]:
         keys = random.split(key, obs.shape[0] + 1)
         actions = jax.vmap(act, in_axes=(None, 0, 0))(actor_params, obs, keys[:-1])
         return actions, keys[-1]
 
-    # @jax.jit
     def act(actor_params, obs: ArrayLike, key: random.KeyArray) -> Array:
         logits = actor_model.apply(actor_params, obs)
         return random.categorical(key, logits)
 
-    # @jax.jit
-    def action_prob(actor_params, obs: ArrayLike, action: ArrayLike) -> Array:
+    def action_log_prob(actor_params, obs: ArrayLike, action: ArrayLike) -> Array:
         logits = actor_model.apply(actor_params, obs)
         return nn.log_softmax(logits)[action]
 
-    # @jax.jit
     def state_value(critic_params, obs: ArrayLike) -> Array:
         return critic_model.apply(critic_params, obs).reshape(())
 
-    # @jax.jit
     def critic_loss(critic_params, obs: ArrayLike, expected_values: ArrayLike) -> Array:
         critic_values = jax.vmap(critic_model.apply, (None, 0))(critic_params, obs)
+
         loss = ((expected_values - critic_values) ** 2).mean()
-        return loss
+        loss += l2_regularization(critic_params, alpha=0.0001)
+        return loss * 0.5
 
     # @jax.jit
     def update_critic(critic_training_state: TrainState, obs: ArrayLike, expected_values: ArrayLike):
@@ -53,28 +54,20 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_
         loss, gradient = jax.value_and_grad(critic_loss)(critic_params, obs, expected_values)
         return critic_training_state.apply_gradients(grads=gradient), loss
 
-    def l2_loss(x, alpha):
-        return alpha * (x ** 2).mean()
-
-    # @jax.jit
     def actor_loss(actor_params, states, actions, advantages):
-        action_probs = jax.vmap(action_prob, (None, 0, 0))(actor_params, states, actions)
+        action_probs = jax.vmap(action_log_prob, (None, 0, 0))(actor_params, states, actions)
 
         loss = -jnp.mean(action_probs * advantages)
-        loss += sum(
-            l2_loss(w, alpha=0.001)
-            for w in jax.tree_leaves(actor_params)
-        )
+        loss += l2_regularization(actor_params, alpha=0.0001)
         return loss
 
-    # @jax.jit
     def update_actor(actor_training_state: TrainState, states, actions, advantages):
         loss, gradient = jax.value_and_grad(actor_loss)(actor_training_state.params, states, actions, advantages)
         return actor_training_state.apply_gradients(grads=gradient), loss
 
-    # @jax.jit
-    def vectorized_train_step(params: Params, obs: ArrayLike, action: ArrayLike, next_obs: ArrayLike, reward: ArrayLike,
-                              done: ArrayLike, importance: ArrayLike, key: random.KeyArray) -> tuple[Params, Array, Metrics]:
+    def vectorized_train_step(params: Params, obs: ArrayLike, action: ArrayLike, next_obs: ArrayLike, rewards: ArrayLike,
+                              done: ArrayLike, importance: ArrayLike, key: random.KeyArray) -> tuple[
+                              Params, Array, Array, random.KeyArray, Metrics]:
         discount = params['discount']
         critic_training_state = params['critic_training_state']
         critic_params = critic_training_state.params
@@ -85,8 +78,8 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, vectorized_
 
         expected_values = v_state_value(critic_params, obs)
         next_expected_values = jnp.where(done,
-                                         reward,
-                                         reward + discount * v_state_value(critic_params, next_obs))
+                                         rewards,
+                                         rewards + discount * v_state_value(critic_params, next_obs))
 
         advantages = next_expected_values - expected_values
         advantages *= importance
