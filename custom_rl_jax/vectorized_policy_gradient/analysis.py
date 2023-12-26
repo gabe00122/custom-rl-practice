@@ -1,19 +1,32 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import json
 
-runs = Path("./run").absolute()
+runs = Path("./run-lander").absolute()
+
+#raw_data = []
+#data = np.zeros((8,), dtype=np.float32)
+
+display_data = pd.DataFrame()
+
+for i, run in enumerate(runs.iterdir()):
+    with open(run / 'settings.json') as file:
+        settings = json.load(file)
+
+    with open(run / 'metrics.csv') as file:
+        metrics = pd.read_csv(file)
+
+    display_data[f'{settings["env_num"]}'] = metrics['rewards'].rolling(1000).mean()
 
 
-data_frame_1 = pd.read_csv(runs / "01" / "metrics.csv")
-data_frame_2 = pd.read_csv(runs / "05" / "metrics.csv")
+# run_1 = pd.read_csv(runs / '1' / 'metrics.csv')
+# # take just the losses
+# run_1 = run_1.iloc[:, 5:]
+#
+# run_1.rolling(10).mean().plot.line()
+# plt.show()
 
-data_frame = pd.DataFrame({
-    '01': data_frame_1['rewards'],
-    '02': data_frame_2['rewards'],
-})
-
-data_frame = data_frame.rolling(window=1000).mean()
-#sns.heatmap(all_rewards)
-data_frame.plot.line()
+display_data.plot.line()
 plt.show()

@@ -4,6 +4,8 @@ from jax.typing import ArrayLike
 import flax.linen as nn
 from flax.training.train_state import TrainState
 from typing_extensions import TypedDict
+from .settings import RunSettings
+
 
 Params = TypedDict("Params", {
     'discount': ArrayLike,
@@ -18,6 +20,8 @@ Metrics = TypedDict("Metrics", {
     'td_error': Array,
     'actor_loss': Array,
     'critic_loss': Array,
+    'entropy_loss': Array,
+    'l2_loss': Array,
 })
 
 
@@ -25,7 +29,17 @@ def l2_regularization(params, alpha: ArrayLike) -> Array:
     return alpha * sum(alpha * (p ** 2).mean() for p in jax.tree_leaves(params))
 
 
-def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, debug: bool = False):
+def mul_exp(x, logp):
+    p = jnp.exp(logp)
+    x = jnp.where(p == 0, 0.0, x)
+    return x * p
+
+
+def entropy_loss(action_probs) -> Array:
+    return jnp.sum(mul_exp(action_probs, action_probs), axis=-1)
+
+
+def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model: nn.Module, debug: bool = False):
     def act(actor_params, obs: ArrayLike, key: random.KeyArray) -> Array:
         logits = actor_model.apply(actor_params, obs)
         return random.categorical(key, logits)
@@ -35,9 +49,9 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, debug: bool
         actions = jax.vmap(act, in_axes=(None, 0, 0))(actor_params, obs, keys[:-1])
         return actions, keys[-1]
 
-    def action_log_prob(actor_params, obs: ArrayLike, action: ArrayLike) -> Array:
+    def action_log_prob(actor_params, obs: ArrayLike) -> Array:
         logits = actor_model.apply(actor_params, obs)
-        return jnp.log(nn.softmax(logits)[action])
+        return nn.log_softmax(logits)
 
     def vectorized_state_value(critic_params, obs: ArrayLike) -> Array:
         return jax.vmap(critic_model.apply, in_axes=(None, 0))(critic_params, obs).flatten()
@@ -54,6 +68,8 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, debug: bool
                             (critic_values - expected_values) ** 2)
             jax.debug.print("critic_loss - loss: {}", loss)
 
+        # loss += l2_regularization(critic_params, alpha=settings['cr'])
+
         return loss
 
     def update_critic(
@@ -65,18 +81,30 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, debug: bool
         loss, gradient = jax.value_and_grad(critic_loss)(critic_params, obs, expected_values)
         return critic_training_state.apply_gradients(grads=gradient), loss
 
-    def actor_loss(actor_params, states, actions, advantages, actor_l2_regularization: float) -> Array:
-        action_probs = jax.vmap(action_log_prob, (None, 0, 0))(actor_params, states, actions)
+    def actor_loss(actor_params, states, actions, advantages) -> tuple[Array, tuple[Array, Array]]:
+        actor_l2_regularization = settings['actor_l2_regularization']
+        entropy_regularization = settings['entropy_regularization']
+
+        action_probs = jax.vmap(action_log_prob, (None, 0))(actor_params, states)
+
+        selected_action_prob = action_probs[jnp.arange(action_probs.shape[0]), actions]
+        loss = -jnp.mean(selected_action_prob * advantages)
+
+        l2_loss = l2_regularization(actor_params, alpha=actor_l2_regularization)
+        e_loss = entropy_regularization * jnp.mean(jax.vmap(entropy_loss)(action_probs))
+
         if debug:
+            jax.debug.print("actor_loss - actions: {}", actions)
             jax.debug.print("actor_loss - action_probs: {}", action_probs)
+            jax.debug.print("actor_loss - selected_action_prob: {}", selected_action_prob)
+            jax.debug.print("actor_loss - l2_loss: {}", l2_loss)
+            jax.debug.print("actor_loss - e_loss: {}", e_loss)
 
-        loss = -jnp.mean(action_probs * advantages)
-        loss += l2_regularization(actor_params, alpha=actor_l2_regularization)
-        return loss
+        return loss + e_loss + l2_loss, (l2_loss, e_loss)
 
-    def update_actor(actor_training_state: TrainState, states, actions, advantages, actor_l2_regularization) -> tuple[TrainState, Array]:
-        loss, gradient = jax.value_and_grad(actor_loss)(actor_training_state.params, states, actions, advantages, actor_l2_regularization)
-        return actor_training_state.apply_gradients(grads=gradient), loss
+    def update_actor(actor_training_state: TrainState, states, actions, advantages) -> tuple[TrainState, Array, Array, Array]:
+        (loss, (l2_loss, e_loss)), gradient = jax.value_and_grad(actor_loss, has_aux=True)(actor_training_state.params, states, actions, advantages)
+        return actor_training_state.apply_gradients(grads=gradient), loss, l2_loss, e_loss
 
     def vectorized_train_step(
             params: Params,
@@ -110,7 +138,7 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, debug: bool
             jax.debug.print("importance: {}", importance)
 
         critic_training_state, c_loss = update_critic(critic_training_state, obs, next_expected_values)
-        actor_training_state, a_loss = update_actor(actor_training_state, obs, action, advantages, actor_l2_regularization)
+        actor_training_state, a_loss, l2_loss, e_loss = update_actor(actor_training_state, obs, action, advantages)
 
         # set the importance back to 1 if it's the end of an episode
         importance *= discount
@@ -130,6 +158,8 @@ def actor_critic_v3(actor_model: nn.Module, critic_model: nn.Module, debug: bool
             'critic_loss': c_loss,
             'td_error': jnp.mean(advantages),
             'state_value': jnp.mean(expected_values),
+            'entropy_loss': e_loss,
+            'l2_loss': l2_loss,
         }
 
         return output_params, actions, key, metrics

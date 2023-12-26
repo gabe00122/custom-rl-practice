@@ -1,31 +1,10 @@
-from typing_extensions import TypedDict
 from jax import numpy as jnp, random
 from flax.training.train_state import TrainState
 import flax.linen as nn
 import optax
 from ..networks.mlp import Mlp
 from .actor_critic_v3 import Params
-
-
-RunSettings = TypedDict('RunSettings', {
-    'seed': int,
-    'total_steps': int,
-    'env_name': str,
-    'env_num': int,
-
-    'discount': float,
-    'actor_hidden_layers': list[int],
-    'critic_hidden_layers': list[int],
-    'actor_last_layer_scale': float,
-    'critic_last_layer_scale': float,
-
-    'actor_learning_rate': float,
-    'critic_learning_rate': float,
-    'actor_adam_beta': float,
-    'critic_adam_beta': float,
-
-    'actor_l2_regularization': float,
-})
+from .settings import RunSettings
 
 
 def create_models(settings: RunSettings, action_space: int) -> tuple[nn.Module, nn.Module]:
@@ -54,12 +33,18 @@ def create_training_params(
     actor_params = actor_model.init(actor_key, state_input)
     critic_params = critic_model.init(critic_key, state_input)
 
+    total_steps = settings['total_steps']
+
     actor_beta = settings['actor_adam_beta']
     actor_lr = settings['actor_learning_rate']
     actor_training_state = TrainState.create(
         apply_fn=actor_model.apply,
         params=actor_params,
-        tx=optax.adam(actor_lr, b1=actor_beta, b2=actor_beta)
+        tx=optax.adam(
+            optax.linear_schedule(actor_lr, 0, total_steps),
+            b1=actor_beta,
+            b2=actor_beta
+        )
     )
 
     critic_beta = settings['critic_adam_beta']
@@ -67,7 +52,11 @@ def create_training_params(
     critic_training_state = TrainState.create(
         apply_fn=critic_model.apply,
         params=critic_params,
-        tx=optax.adam(critic_lr, b1=critic_beta, b2=critic_beta)
+        tx=optax.adam(
+            optax.linear_schedule(critic_lr, 0, total_steps),
+            b1=critic_beta,
+            b2=critic_beta
+        )
     )
 
     return {
