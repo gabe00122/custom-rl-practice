@@ -10,6 +10,7 @@ from .settings import RunSettings
 Params = TypedDict("Params", {
     'discount': ArrayLike,
     'actor_l2_regularization': ArrayLike,
+    'entropy_regularization': ArrayLike,
     'actor_training_state': TrainState,
     'critic_training_state': TrainState,
     'importance': ArrayLike,
@@ -81,9 +82,7 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
         loss, gradient = jax.value_and_grad(critic_loss)(critic_params, obs, expected_values)
         return critic_training_state.apply_gradients(grads=gradient), loss
 
-    def actor_loss(actor_params, states, actions, advantages) -> tuple[Array, tuple[Array, Array]]:
-        actor_l2_regularization = settings['actor_l2_regularization']
-        entropy_regularization = settings['entropy_regularization']
+    def actor_loss(actor_params, states, actions, advantages, actor_l2_regularization, entropy_regularization) -> tuple[Array, tuple[Array, Array]]:
 
         action_probs = jax.vmap(action_log_prob, (None, 0))(actor_params, states)
 
@@ -102,8 +101,8 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
 
         return loss + e_loss + l2_loss, (l2_loss, e_loss)
 
-    def update_actor(actor_training_state: TrainState, states, actions, advantages) -> tuple[TrainState, Array, Array, Array]:
-        (loss, (l2_loss, e_loss)), gradient = jax.value_and_grad(actor_loss, has_aux=True)(actor_training_state.params, states, actions, advantages)
+    def update_actor(actor_training_state: TrainState, states, actions, advantages, actor_l2_regularization, entropy_regularization) -> tuple[TrainState, Array, Array, Array]:
+        (loss, (l2_loss, e_loss)), gradient = jax.value_and_grad(actor_loss, has_aux=True)(actor_training_state.params, states, actions, advantages, actor_l2_regularization, entropy_regularization)
         return actor_training_state.apply_gradients(grads=gradient), loss, l2_loss, e_loss
 
     def vectorized_train_step(
@@ -117,10 +116,12 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
     ) -> tuple[Params, Array, random.KeyArray, Metrics]:
         discount = params['discount']
         actor_l2_regularization = params['actor_l2_regularization']
+        entropy_regularization = params['entropy_regularization']
         critic_training_state = params['critic_training_state']
         critic_params = critic_training_state.params
         actor_training_state = params['actor_training_state']
         importance = params['importance']
+
 
         expected_values = vectorized_state_value(critic_params, obs)
 
@@ -138,7 +139,7 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
             jax.debug.print("importance: {}", importance)
 
         critic_training_state, c_loss = update_critic(critic_training_state, obs, next_expected_values)
-        actor_training_state, a_loss, l2_loss, e_loss = update_actor(actor_training_state, obs, action, advantages)
+        actor_training_state, a_loss, l2_loss, e_loss = update_actor(actor_training_state, obs, action, advantages, actor_l2_regularization, entropy_regularization)
 
         # set the importance back to 1 if it's the end of an episode
         importance *= discount
@@ -147,6 +148,7 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
         output_params: Params = {
             'discount': discount,
             'actor_l2_regularization': actor_l2_regularization,
+            'entropy_regularization': entropy_regularization,
             'critic_training_state': critic_training_state,
             'actor_training_state': actor_training_state,
             'importance': importance,

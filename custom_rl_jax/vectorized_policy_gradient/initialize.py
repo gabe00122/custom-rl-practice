@@ -62,6 +62,7 @@ def create_training_params(
     return {
         'discount': settings['discount'],
         'actor_l2_regularization': settings['actor_l2_regularization'],
+        'entropy_regularization': settings['entropy_regularization'],
         'importance': jnp.ones((settings['env_num'],)),
         'actor_training_state': actor_training_state,
         'critic_training_state': critic_training_state,

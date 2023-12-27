@@ -4,29 +4,30 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import json
 
-runs = Path("./run-lander").absolute()
+runs = Path("./run-lander-997-5").absolute()
 
 #raw_data = []
 #data = np.zeros((8,), dtype=np.float32)
 
-display_data = pd.DataFrame()
+# display_data = pd.DataFrame()
 
-for i, run in enumerate(runs.iterdir()):
-    with open(run / 'settings.json') as file:
-        settings = json.load(file)
-
-    with open(run / 'metrics.csv') as file:
-        metrics = pd.read_csv(file)
-
-    display_data[f'{settings["env_num"]}'] = metrics['rewards'].rolling(1000).mean()
-
-
-# run_1 = pd.read_csv(runs / '1' / 'metrics.csv')
-# # take just the losses
-# run_1 = run_1.iloc[:, 5:]
+# for i, run in enumerate(runs.iterdir()):
+#     with open(run / 'settings.json') as file:
+#         settings = json.load(file)
 #
-# run_1.rolling(10).mean().plot.line()
-# plt.show()
+#     with open(run / 'metrics.csv') as file:
+#         metrics = pd.read_csv(file)
+#
+#     display_data[f'{settings["env_num"]}'] = metrics['rewards'].rolling(1000).mean()
 
-display_data.plot.line()
+
+run_1 = pd.read_csv(runs / 'metrics.csv')
+# # take just the losses
+run_1.rolling(1000).mean()
+run_1 = run_1.iloc[::1000, 5]
+#
+run_1.plot.line()
 plt.show()
+
+# display_data.plot.line()
+# plt.show()

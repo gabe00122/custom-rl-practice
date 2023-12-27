@@ -17,7 +17,7 @@ def main():
     critic_model = Mlp(features=[64, 64, 1], last_layer_scale=1.0)
     _, act = actor_critic(actor_model, critic_model)
 
-    cp_path = Path('./run-lander/params').absolute()
+    cp_path = Path('./run-lander-997-5/params').absolute()
     orbax_checkpointer = ocp.PyTreeCheckpointer()
     raw_restored = orbax_checkpointer.restore(cp_path)
     actor_params = raw_restored['actor_training_state']['params']
