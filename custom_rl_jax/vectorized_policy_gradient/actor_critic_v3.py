@@ -41,11 +41,11 @@ def entropy_loss(action_probs) -> Array:
 
 
 def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model: nn.Module, debug: bool = False):
-    def act(actor_params, obs: ArrayLike, key: random.KeyArray) -> Array:
+    def act(actor_params, obs: ArrayLike, key: ArrayLike) -> Array:
         logits = actor_model.apply(actor_params, obs)
         return random.categorical(key, logits)
 
-    def vectorized_act(actor_params, obs: ArrayLike, key: random.KeyArray) -> tuple[Array, random.KeyArray]:
+    def vectorized_act(actor_params, obs: ArrayLike, key: ArrayLike) -> tuple[Array, ArrayLike]:
         keys = random.split(key, obs.shape[0] + 1)
         actions = jax.vmap(act, in_axes=(None, 0, 0))(actor_params, obs, keys[:-1])
         return actions, keys[-1]
@@ -112,8 +112,8 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
             next_obs: ArrayLike,
             rewards: ArrayLike,
             done: ArrayLike,
-            key: random.KeyArray
-    ) -> tuple[Params, Array, random.KeyArray, Metrics]:
+            key: ArrayLike
+    ) -> tuple[Params, Array, ArrayLike, Metrics]:
         discount = params['discount']
         actor_l2_regularization = params['actor_l2_regularization']
         entropy_regularization = params['entropy_regularization']

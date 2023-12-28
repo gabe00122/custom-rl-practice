@@ -25,8 +25,8 @@ def create_training_params(
         actor_model: nn.Module,
         critic_model: nn.Module,
         state_space: int,
-        key: random.KeyArray,
-) -> tuple[Params, random.KeyArray]:
+        key: ArrayLike,
+) -> tuple[Params, ArrayLike]:
     state_input = jnp.zeros((state_space,))
     key, actor_key, critic_key = random.split(key, 3)
 
