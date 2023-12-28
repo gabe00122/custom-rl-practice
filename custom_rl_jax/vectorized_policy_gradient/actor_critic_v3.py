@@ -166,4 +166,6 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
 
         return output_params, actions, key, metrics
 
-    return jax.jit(vectorized_train_step), jax.jit(vectorized_act), jax.jit(act)
+    return (jax.jit(vectorized_train_step, donate_argnames=['params', 'action', 'key']),
+            jax.jit(vectorized_act, donate_argnames=['key']),
+            jax.jit(act))

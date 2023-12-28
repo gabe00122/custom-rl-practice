@@ -27,7 +27,7 @@ def train(settings: RunSettings, path: Path):
     num_envs = settings['env_num']
 
     obs, _ = env.reset(seed=settings['seed'])
-    obs = jnp.array(obs)
+    obs = jnp.asarray(obs)
 
     actions, key = vectorized_act(params['actor_training_state'].params, obs, key)
 
@@ -52,9 +52,9 @@ def train(settings: RunSettings, path: Path):
         for step in tsteps:
             tsteps.set_description(f"Step {step}")
 
-            next_obs, reward, terminated, truncated, info = env.step(np.array(actions))
+            next_obs, reward, terminated, truncated, info = env.step(np.asarray(actions))
             #reward /= max_discounted_reward
-            next_obs = jnp.array(next_obs, dtype=jnp.float32)
+            next_obs = jnp.asarray(next_obs, dtype=jnp.float32)
 
             done = np.logical_or(terminated, truncated)
             params, actions, key, metrics = vectorized_train_step(

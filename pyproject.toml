@@ -20,6 +20,7 @@ orbax-checkpoint = "^0.4.7"
 seaborn = "^0.13.0"
 optax = "^0.1.7"
 mpld3 = "^0.5.10"
+optuna = "^3.5.0"
 
 
 [build-system]
