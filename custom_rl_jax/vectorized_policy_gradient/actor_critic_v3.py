@@ -45,7 +45,7 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
         logits = actor_model.apply(actor_params, obs)
         return random.categorical(key, logits)
 
-    def vectorized_act(actor_params, obs: ArrayLike, key: ArrayLike) -> tuple[Array, ArrayLike]:
+    def vectorized_act(actor_params, obs: ArrayLike, key: ArrayLike) -> tuple[Array, Array]:
         keys = random.split(key, obs.shape[0] + 1)
         actions = jax.vmap(act, in_axes=(None, 0, 0))(actor_params, obs, keys[:-1])
         return actions, keys[-1]
@@ -113,7 +113,7 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
             rewards: ArrayLike,
             done: ArrayLike,
             key: ArrayLike
-    ) -> tuple[Params, Array, ArrayLike, Metrics]:
+    ) -> tuple[Params, Array, Array, Metrics]:
         discount = params['discount']
         actor_l2_regularization = params['actor_l2_regularization']
         entropy_regularization = params['entropy_regularization']
