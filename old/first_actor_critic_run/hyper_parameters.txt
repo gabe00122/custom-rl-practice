@@ -1,5 +1,0 @@
-    hyper_params: HyperParams = {
-        'discount': 0.99,
-        'actor_learning_rate': 0.001,
-        'critic_learning_rate': 0.001,
-    }

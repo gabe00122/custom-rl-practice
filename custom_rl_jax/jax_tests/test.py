@@ -1,7 +1,10 @@
+import flax.core
 import jax
 from jax import numpy as jnp, Array, random
 from jax.typing import ArrayLike
+from flax import linen as nn, struct
 from ..networks.mlp import Mlp
+
 
 key = random.PRNGKey(234)
 
@@ -9,25 +12,27 @@ key, init_key, action_key = random.split(key, 3)
 
 network_input = jnp.ones((4,), dtype=jnp.float32)
 
-actor_model = Mlp(features=[64, 64, 4], last_layer_scale=0.01)
+actor_model = Mlp(features=[64, 64, 4])
 params = actor_model.init(init_key, network_input)
 
 
-def act(actor_params, obs: ArrayLike, key: ArrayLike) -> Array:
-    logits = actor_model.apply(actor_params, obs)
-    return random.categorical(key, logits)
+class TestAlgo(struct.PyTreeNode):
+    x: float = struct.field()
+    y: float = struct.field(default=10)
+
+    def double(self) -> 'TestAlgo':
+        return TestAlgo(x=self.x * 2, y=self.y * 2)
+
+    @classmethod
+    def create(cls, x: float) -> 'TestAlgo':
+        return cls(x=x)
 
 
-def vectorized_act(actor_params, obs: ArrayLike, key: ArrayLike) -> tuple[Array, random.KeyArray]:
-    keys = random.split(key, obs.shape[0] + 1)
-    actions = jax.vmap(act, in_axes=(None, 0, 0))(actor_params, obs, keys[:-1])
-    return actions, keys[-1]
+test_algo = TestAlgo.create(x=1)
 
 
-# print(jax.make_jaxpr(act)(params, network_input, action_key))
+jit_double = jax.jit(test_algo.double)
+test_algo = jit_double()
+test2 = test_algo.replace(y=0)
 
-lowered = jax.jit(act).lower(params, network_input, action_key)
-#print(lowered.as_text())
-compiled = lowered.compile()
-#
-print(compiled.as_text())
+print(f"{test2.x}, {test2.y}")

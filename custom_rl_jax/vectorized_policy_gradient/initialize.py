@@ -1,4 +1,5 @@
-from jax import numpy as jnp, random
+from jax import numpy as jnp, random, Array
+from jax.typing import ArrayLike
 from flax.training.train_state import TrainState
 import flax.linen as nn
 import optax
@@ -26,7 +27,7 @@ def create_training_params(
         critic_model: nn.Module,
         state_space: int,
         key: ArrayLike,
-) -> tuple[Params, ArrayLike]:
+) -> tuple[Params, Array]:
     state_input = jnp.zeros((state_space,))
     key, actor_key, critic_key = random.split(key, 3)
 
