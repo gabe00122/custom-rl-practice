@@ -26,6 +26,11 @@ Metrics = TypedDict("Metrics", {
 })
 
 
+def l2_init_regularization(params, original_params, alpha: ArrayLike) -> Array:
+    delta = jax.tree_map(lambda p, op: p - op, params, original_params)
+    return l2_regularization(delta, alpha)
+
+
 def l2_regularization(params, alpha: ArrayLike) -> Array:
     return alpha * sum(alpha * (p ** 2).mean() for p in jax.tree_leaves(params))
 
@@ -40,7 +45,7 @@ def entropy_loss(action_probs) -> Array:
     return jnp.sum(mul_exp(action_probs, action_probs), axis=-1)
 
 
-def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model: nn.Module, debug: bool = False):
+def actor_critic_v3(init_actor_params, init_critic_params, actor_model: nn.Module, critic_model: nn.Module, debug: bool = False):
     def act(actor_params, obs: ArrayLike, key: ArrayLike) -> Array:
         logits = actor_model.apply(actor_params, obs)
         return random.categorical(key, logits)
@@ -69,7 +74,7 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
                             (critic_values - expected_values) ** 2)
             jax.debug.print("critic_loss - loss: {}", loss)
 
-        # loss += l2_regularization(critic_params, alpha=settings['cr'])
+        loss += l2_init_regularization(critic_params, init_critic_params, alpha=0.001)
 
         return loss
 
@@ -83,13 +88,12 @@ def actor_critic_v3(settings: RunSettings, actor_model: nn.Module, critic_model:
         return critic_training_state.apply_gradients(grads=gradient), loss
 
     def actor_loss(actor_params, states, actions, advantages, actor_l2_regularization, entropy_regularization) -> tuple[Array, tuple[Array, Array]]:
-
         action_probs = jax.vmap(action_log_prob, (None, 0))(actor_params, states)
 
         selected_action_prob = action_probs[jnp.arange(action_probs.shape[0]), actions]
         loss = -jnp.mean(selected_action_prob * advantages)
 
-        l2_loss = l2_regularization(actor_params, alpha=actor_l2_regularization)
+        l2_loss = l2_init_regularization(actor_params, init_actor_params, alpha=actor_l2_regularization)
         e_loss = entropy_regularization * jnp.mean(jax.vmap(entropy_loss)(action_probs))
 
         if debug:

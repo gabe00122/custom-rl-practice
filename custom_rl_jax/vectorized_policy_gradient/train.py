@@ -18,10 +18,15 @@ def train(settings: RunSettings, path: Path):
     action_space = env.single_action_space.n
     state_space = env.single_observation_space.shape[0]
 
+
     actor_model, critic_model = create_models(settings, action_space)
     params, key = create_training_params(settings, actor_model, critic_model, state_space, key)
 
-    vectorized_train_step, vectorized_act, act = actor_critic_v3(settings, actor_model, critic_model)
+    init_actor_params = params['actor_training_state'].params
+    init_critic_params = params['critic_training_state'].params
+
+    vectorized_train_step, vectorized_act, act = actor_critic_v3(
+        init_actor_params, init_critic_params, actor_model, critic_model)
 
     total_steps = settings['total_steps']
     num_envs = settings['env_num']
@@ -46,14 +51,11 @@ def train(settings: RunSettings, path: Path):
     episode_zeros = np.zeros((num_envs,))
     mean_finished_episode_rewards = 0
 
-    #max_discounted_reward = 500 * (params['discount'] ** 500)
-
     with tqdm(range(total_steps), unit='steps') as tsteps:
         for step in tsteps:
             tsteps.set_description(f"Step {step}")
 
             next_obs, reward, terminated, truncated, info = env.step(np.asarray(actions))
-            #reward /= max_discounted_reward
             next_obs = jnp.asarray(next_obs, dtype=jnp.float32)
 
             done = np.logical_or(terminated, truncated)

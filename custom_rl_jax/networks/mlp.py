@@ -12,12 +12,16 @@ class Mlp(nn.Module):
         x = inputs
         for i, feat in enumerate(self.features):
             not_last_feat = i != len(self.features) - 1
-            initializer_scale = 1.0 if not_last_feat else self.last_layer_scale
+
+            if not_last_feat or self.last_layer_scale == 1.0:
+                kernel_init = nn.initializers.he_normal()
+            else:
+                kernel_init = nn.initializers.variance_scaling(self.last_layer_scale * 2, 'fan_in', 'truncated_normal')
 
             x = nn.Dense(
                 feat,
                 name=f'Layer {i}',
-                kernel_init=nn.initializers.variance_scaling(initializer_scale, 'fan_avg', 'uniform')
+                kernel_init=kernel_init
             )(x)
             if not_last_feat:
                 x = mish(x)
