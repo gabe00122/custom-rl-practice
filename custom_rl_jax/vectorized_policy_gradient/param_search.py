@@ -6,7 +6,7 @@ from .train import train
 def base_settings() -> RunSettings:
     return {
         'seed': 57584,
-        'total_steps': 250_000,
+        'total_steps': 500_000,
         'env_name': 'LunarLander-v2',
         'env_num': 64,
         'discount': 0.99,
@@ -24,7 +24,7 @@ def base_settings() -> RunSettings:
 
 
 def main():
-    run_dir = Path('./run-lander-l2-init-entropy').absolute()
+    run_dir = Path('./run-lander-l2-fix-last-layer-init').absolute()
     #for i in range(4):
     settings = base_settings()
     # settings['seed'] = i

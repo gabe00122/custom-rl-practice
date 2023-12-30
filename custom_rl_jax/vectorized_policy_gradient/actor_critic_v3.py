@@ -32,7 +32,8 @@ def l2_init_regularization(params, original_params, alpha: ArrayLike) -> Array:
 
 
 def l2_regularization(params, alpha: ArrayLike) -> Array:
-    return alpha * sum(alpha * (p ** 2).mean() for p in jax.tree_leaves(params))
+    leaves = jax.tree_util.tree_leaves(params)
+    return alpha * sum(jnp.sum(jnp.square(p)) for p in leaves)
 
 
 def mul_exp(x, logp):

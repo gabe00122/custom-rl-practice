@@ -17,7 +17,7 @@ def main():
     critic_model = Mlp(features=[64, 64, 1], last_layer_scale=1.0)
     _, act = actor_critic(actor_model, critic_model)
 
-    cp_path = Path('./run-lander-l2-init-entropy/params').absolute()
+    cp_path = Path('./run-lander-l2-fix-last-layer-init/params').absolute()
     orbax_checkpointer = ocp.PyTreeCheckpointer()
     raw_restored = orbax_checkpointer.restore(cp_path)
     actor_params = raw_restored['actor_training_state']['params']
@@ -29,12 +29,16 @@ def main():
         obs, info = env.reset()
 
         done = False
+        total_reward = 0
         while not done:
             key, act_key = random.split(key)
             action = act(actor_params, obs, act_key)
 
-            obs, _, truncated, terminated, _ = env.step(action.item())
+            obs, reward, truncated, terminated, _ = env.step(action.item())
+            total_reward += reward
             done = truncated or terminated
+
+        print(total_reward)
 
 
 

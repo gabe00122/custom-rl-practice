@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import json
 
-runs = Path("./run-lander-l2-init-entropy").absolute()
+runs = Path("./run-lander-l2-fix-last-layer-init").absolute()
 
 #raw_data = []
 #data = np.zeros((8,), dtype=np.float32)
