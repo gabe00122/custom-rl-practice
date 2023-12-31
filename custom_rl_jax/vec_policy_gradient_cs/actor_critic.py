@@ -104,9 +104,10 @@ class ActorCritic(PyTreeNode):
     @jax.jit
     def critic_loss(
         self, critic_params: ModelParams, init_critic_params: ModelParams, obs: ArrayLike, expected_values: ArrayLike
-    ) -> tuple[Array, Array]:
+    ) -> tuple[Array, tuple[Array, Array]]:
         critic_values = self.vec_state_values(critic_params, obs)
-        loss = ((expected_values - critic_values) ** 2).mean()
+        td_error = expected_values - critic_values
+        loss = (td_error ** 2).mean()
 
         reg_loss = 0.0
         if self.critic_regularization_type == "l2_init":
@@ -120,13 +121,13 @@ class ActorCritic(PyTreeNode):
 
         loss += reg_loss
 
-        return loss, reg_loss
+        return loss, (td_error, reg_loss)
 
     @jax.jit
     def update_critic(
         self, params: TrainingState, obs: ArrayLike, expected_values: ArrayLike
-    ) -> tuple[TrainingState, Array, Array]:
-        (loss, reg_loss), gradient = jax.value_and_grad(self.critic_loss, has_aux=True)(
+    ) -> tuple[TrainingState, Array, Array, Array]:
+        (loss, (td_error, reg_loss)), gradient = jax.value_and_grad(self.critic_loss, has_aux=True)(
             params.critic_params, params.init_critic_params, obs, expected_values
         )
         updates, updated_opt_state = self.critic_optimizer.update(
@@ -139,6 +140,7 @@ class ActorCritic(PyTreeNode):
                 critic_params=updated_params,
                 critic_opt_state=updated_opt_state,
             ),
+            td_error,
             loss,
             reg_loss,
         )
@@ -150,12 +152,12 @@ class ActorCritic(PyTreeNode):
         init_actor_params: ModelParams,
         states: ArrayLike,
         actions: ArrayLike,
-        advantages: ArrayLike,
+        td_error: ArrayLike,
     ) -> tuple[Array, tuple[Array, Array]]:
         action_probs = jax.vmap(self.action_log_prob, (None, 0))(actor_params, states)
         selected_action_prob = action_probs[jnp.arange(action_probs.shape[0]), actions]
 
-        loss = -jnp.mean(selected_action_prob * advantages)
+        loss = -jnp.mean(selected_action_prob * td_error)
 
         if self.actor_regularization_type == "l2_init":
             reg_loss = l2_init_regularization(actor_params, init_actor_params, alpha=self.actor_regularization_alpha)
@@ -174,10 +176,10 @@ class ActorCritic(PyTreeNode):
 
     @jax.jit
     def update_actor(
-        self, params: TrainingState, states: ArrayLike, actions: ArrayLike, advantages: ArrayLike
+        self, params: TrainingState, states: ArrayLike, actions: ArrayLike, td_error: ArrayLike
     ) -> tuple[TrainingState, Array, Array, Array]:
         (loss, (reg_loss, entropy)), gradient = jax.value_and_grad(self.actor_loss, has_aux=True)(
-            params.actor_params, params.init_actor_params, states, actions, advantages
+            params.actor_params, params.init_actor_params, states, actions, td_error
         )
         updates, updated_opt_state = self.actor_optimizer.update(gradient, params.actor_opt_state, params.actor_params)
         updated_params = optax.apply_updates(params.actor_params, updates)
@@ -203,19 +205,14 @@ class ActorCritic(PyTreeNode):
         importance: ArrayLike,
         key: ArrayLike,
     ) -> tuple[TrainingState, Metrics, Array, Array, Array]:
-        expected_values = self.vec_state_values(params.critic_params, obs)
-
-        next_expected_values = jnp.where(
+        expected_values = jnp.where(
             done,
             rewards,
             rewards + self.discount * jax.lax.stop_gradient(self.vec_state_values(params.critic_params, next_obs)),
         )
 
-        advantages = next_expected_values - expected_values
-        advantages *= importance
-
-        params, c_loss, critic_reg_loss = self.update_critic(params, obs, next_expected_values)
-        params, a_loss, actor_reg_loss, entropy = self.update_actor(params, obs, action, advantages)
+        params, td_error, c_loss, critic_reg_loss = self.update_critic(params, obs, expected_values)
+        params, a_loss, actor_reg_loss, entropy = self.update_actor(params, obs, action, td_error * importance)
 
         # set the importance back to 1 if it's the end of an episode
         importance = jnp.maximum(importance * self.discount, done)
@@ -224,7 +221,7 @@ class ActorCritic(PyTreeNode):
         metrics: Metrics = {
             "actor_loss": a_loss,
             "critic_loss": c_loss,
-            "td_error": jnp.mean(advantages),
+            "td_error": jnp.mean(td_error),
             "state_value": jnp.mean(expected_values),
             "entropy": entropy,
             "actor_reg_loss": actor_reg_loss,
