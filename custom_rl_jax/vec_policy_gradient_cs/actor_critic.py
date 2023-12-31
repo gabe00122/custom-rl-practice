@@ -37,6 +37,9 @@ class TrainingState(PyTreeNode):
 
 
 class ActorCritic(PyTreeNode):
+    action_space: int = struct.field(pytree_node=False)
+    observation_space: int = struct.field(pytree_node=False)
+
     actor_model: nn.Module = struct.field(pytree_node=False)
     actor_optimizer: optax.GradientTransformation = struct.field(pytree_node=False)
     critic_model: nn.Module = struct.field(pytree_node=False)
@@ -53,11 +56,10 @@ class ActorCritic(PyTreeNode):
 
     def init(
         self,
-        obs_space: int,
         key: ArrayLike,
     ) -> tuple[TrainingState, Array]:
         key, actor_key, critic_key = random.split(key, 3)
-        observation_dummy = jnp.zeros((obs_space,))
+        observation_dummy = jnp.zeros((self.observation_space,))
 
         actor_params = self.actor_model.init(actor_key, observation_dummy)
         critic_params = self.critic_model.init(critic_key, observation_dummy)

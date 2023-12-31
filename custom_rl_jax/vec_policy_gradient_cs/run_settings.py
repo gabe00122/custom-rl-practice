@@ -11,6 +11,8 @@ RunSettings = TypedDict('RunSettings', {
     'discount': float,
     'actor_hidden_layers': list[int],
     'critic_hidden_layers': list[int],
+    'actor_last_layer_scale': float,
+    'critic_last_layer_scale': float,
 
     'actor_learning_rate': float,
     'critic_learning_rate': float,

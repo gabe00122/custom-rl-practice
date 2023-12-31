@@ -13,8 +13,8 @@ def main():
 
     key = random.PRNGKey(53245)
 
-    actor_model = Mlp(features=[64, 64, action_space], last_layer_scale=0.01)
-    critic_model = Mlp(features=[64, 64, 1], last_layer_scale=1.0)
+    actor_model = Mlp(features=[128, 128, 128, action_space], last_layer_scale=0.01)
+    critic_model = Mlp(features=[128, 128, 128, 1], last_layer_scale=1.0)
     _, act = actor_critic(actor_model, critic_model)
 
     cp_path = Path('./run-lander-l2-fix-last-layer-init/params').absolute()
