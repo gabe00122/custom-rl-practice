@@ -22,10 +22,12 @@ def main():
         critic_model=critic_model,
         actor_optimizer=actor_optimizer,
         critic_optimizer=critic_optimizer,
+        action_space=action_space,
+        observation_space=observation_space,
     )
 
     key = random.PRNGKey(53245)
-    params, key = actor_critic.init(observation_space, key)
+    params, key = actor_critic.init(key)
 
     # dummy inputs
     observation = jnp.zeros((observation_space,))
@@ -53,7 +55,7 @@ def main():
         #     actor_critic, params.actor_params, params.init_actor_params, vectorized_observation, actions, advantages
         # ),
         # "update_actor": actor_critic.update_actor.lower(actor_critic, params, vectorized_observation, actions, advantages),
-        "vectorized_train_step": actor_critic.vec_train_step.lower(
+        "vectorized_train_step": actor_critic.train_step.lower(
             actor_critic,
             params,
             vectorized_observation,
@@ -62,7 +64,6 @@ def main():
             vectorized_observation,
             jnp.zeros((vec_num,), dtype=jnp.bool_),
             jnp.ones((vec_num,)),
-            key,
         ),
     }
 

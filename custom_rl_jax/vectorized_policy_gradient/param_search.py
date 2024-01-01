@@ -7,11 +7,11 @@ def base_settings() -> RunSettings:
     return {
         'seed': 57584,
         'total_steps': 500_000,
-        'env_name': 'LunarLander-v2',
+        'env_name': 'CartPole-v1',
         'env_num': 64,
         'discount': 0.99,
-        'actor_hidden_layers': [128, 128, 128],
-        'critic_hidden_layers': [128, 128, 128],
+        'actor_hidden_layers': [64, 64],
+        'critic_hidden_layers': [64, 64],
         'actor_last_layer_scale': 0.01,
         'critic_last_layer_scale': 1.0,
         'actor_learning_rate': 2 ** -10,
@@ -24,7 +24,7 @@ def base_settings() -> RunSettings:
 
 
 def main():
-    run_dir = Path('./run-lander-l2-fix-last-layer-init').absolute()
+    run_dir = Path('./blank').absolute()
     #for i in range(4):
     settings = base_settings()
     # settings['seed'] = i

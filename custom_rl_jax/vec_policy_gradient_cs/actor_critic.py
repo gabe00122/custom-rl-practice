@@ -6,7 +6,6 @@ from flax.core.frozen_dict import FrozenDict, Mapping
 from flax.struct import PyTreeNode
 import optax
 from typing import Any, TypedDict
-from functools import partial
 from .regularization import l2_regularization, l2_init_regularization, entropy_loss
 
 type ModelParams = FrozenDict[str, Mapping[str, Any]] | dict[str, Any]
@@ -45,14 +44,14 @@ class ActorCritic(PyTreeNode):
     critic_model: nn.Module = struct.field(pytree_node=False)
     critic_optimizer: optax.GradientTransformation = struct.field(pytree_node=False)
 
-    discount: float = struct.field(default=0.99)
+    discount: float = struct.field(pytree_node=False, default=0.99)
 
     actor_regularization_type: str = struct.field(pytree_node=False, default="l2_init")
-    actor_regularization_alpha: float = struct.field(default=0.001)
+    actor_regularization_alpha: float = struct.field(pytree_node=False, default=0.001)
     actor_entropy_regularization: float = struct.field(pytree_node=False, default=0.0)
 
     critic_regularization_type: str = struct.field(pytree_node=False, default="l2_init")
-    critic_regularization_alpha: float = struct.field(default=0.001)
+    critic_regularization_alpha: float = struct.field(pytree_node=False, default=0.001)
 
     def init(
         self,
@@ -79,19 +78,9 @@ class ActorCritic(PyTreeNode):
         )
 
     @jax.jit
-    def act(self, params: TrainingState, obs: ArrayLike, key: ArrayLike) -> tuple[Array, Array]:
-        key, action_key = random.split(key)
+    def act(self, params: TrainingState, obs: ArrayLike, key: ArrayLike) -> Array:
         logits = self.actor_model.apply(params.actor_params, obs)
-        return random.categorical(action_key, logits), key
-
-    @jax.jit
-    def vec_act(self, params: TrainingState, obs: ArrayLike, key: ArrayLike) -> tuple[Array, Array]:
-        key, action_key = random.split(key)
-        vec_actor_model = jax.vmap(self.actor_model.apply, in_axes=(None, 0))
-
-        logits = vec_actor_model(params.actor_params, obs)
-        actions = random.categorical(action_key, logits, axis=1)
-        return actions, key
+        return random.categorical(key, logits)
 
     @jax.jit
     def action_log_prob(self, actor_params: ModelParams, obs: ArrayLike) -> Array:
@@ -99,15 +88,16 @@ class ActorCritic(PyTreeNode):
         return nn.log_softmax(logits)
 
     @jax.jit
-    def vec_state_values(self, critic_params: ModelParams, obs: ArrayLike) -> Array:
-        vec_critic_model = jax.vmap(self.critic_model.apply, in_axes=(None, 0))
-        return vec_critic_model(critic_params, obs).flatten()
+    def state_values(self, critic_params: ModelParams, obs: ArrayLike) -> Array:
+        return self.critic_model.apply(critic_params, obs).reshape(())
 
     @jax.jit
     def critic_loss(
         self, critic_params: ModelParams, init_critic_params: ModelParams, obs: ArrayLike, expected_values: ArrayLike
     ) -> tuple[Array, tuple[Array, Array]]:
-        critic_values = self.vec_state_values(critic_params, obs)
+        state_values_rng = jax.vmap(self.state_values, (None, 0))
+
+        critic_values = state_values_rng(critic_params, obs)
         td_error = expected_values - critic_values
         loss = (td_error ** 2).mean()
 
@@ -156,21 +146,23 @@ class ActorCritic(PyTreeNode):
         actions: ArrayLike,
         td_error: ArrayLike,
     ) -> tuple[Array, tuple[Array, Array]]:
-        action_probs = jax.vmap(self.action_log_prob, (None, 0))(actor_params, states)
-        selected_action_prob = action_probs[jnp.arange(action_probs.shape[0]), actions]
+        action_log_prob_rng = jax.vmap(self.action_log_prob, (None, 0))
+        entropy_loss_rng = jax.vmap(entropy_loss)
 
+        action_probs = action_log_prob_rng(actor_params, states)
+        entropy = jnp.mean(entropy_loss_rng(action_probs))
+
+        selected_action_prob = action_probs[jnp.arange(action_probs.shape[0]), actions]
         loss = -jnp.mean(selected_action_prob * td_error)
 
+        reg_loss = 0.0
         if self.actor_regularization_type == "l2_init":
             reg_loss = l2_init_regularization(actor_params, init_actor_params, alpha=self.actor_regularization_alpha)
         elif self.actor_regularization_type == "l2":
             reg_loss = l2_regularization(actor_params, alpha=self.actor_regularization_alpha)
-        else:
-            reg_loss = 0.0
 
         loss += reg_loss
 
-        entropy = jnp.mean(jax.vmap(entropy_loss)(action_probs))
         if self.actor_entropy_regularization > 0.0:
             loss += self.actor_entropy_regularization * entropy
 
@@ -195,8 +187,8 @@ class ActorCritic(PyTreeNode):
             entropy,
         )
 
-    @partial(jax.jit, donate_argnums=(0, 1, 3, 7, 8))
-    def vec_train_step(
+    @jax.jit
+    def train_step(
         self,
         params: TrainingState,
         obs: ArrayLike,
@@ -205,12 +197,13 @@ class ActorCritic(PyTreeNode):
         next_obs: ArrayLike,
         done: ArrayLike,
         importance: ArrayLike,
-        key: ArrayLike,
-    ) -> tuple[TrainingState, Metrics, Array, Array, Array]:
+    ) -> tuple[TrainingState, Metrics, Array]:
+        state_value_rng = jax.vmap(self.state_values, (None, 0))
+
         expected_values = jnp.where(
             done,
             rewards,
-            rewards + self.discount * jax.lax.stop_gradient(self.vec_state_values(params.critic_params, next_obs)),
+            rewards + self.discount * jax.lax.stop_gradient(state_value_rng(params.critic_params, next_obs)),
         )
 
         params, td_error, c_loss, critic_reg_loss = self.update_critic(params, obs, expected_values)
@@ -218,7 +211,6 @@ class ActorCritic(PyTreeNode):
 
         # set the importance back to 1 if it's the end of an episode
         importance = jnp.maximum(importance * self.discount, done)
-        actions, key = self.vec_act(params, next_obs, key)
 
         metrics: Metrics = {
             "actor_loss": a_loss,
@@ -230,4 +222,4 @@ class ActorCritic(PyTreeNode):
             "critic_reg_loss": critic_reg_loss,
         }
 
-        return params, metrics, importance, actions, key
+        return params, metrics, importance
