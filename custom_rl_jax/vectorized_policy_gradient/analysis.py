@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import json
 
-runs = Path("./run-lander-l2-fix-last-layer-init").absolute()
+runs = Path("./gcu-less-l2").absolute()
 
 #raw_data = []
 #data = np.zeros((8,), dtype=np.float32)
@@ -24,7 +24,8 @@ runs = Path("./run-lander-l2-fix-last-layer-init").absolute()
 run_1 = pd.read_csv(runs / 'metrics.csv')
 # # take just the losses
 run_1.rolling(1000).mean()
-run_1 = run_1.iloc[::1000]
+# run_1 = run_1[]
+run_1 = run_1.iloc[::1000, 5:]
 #
 run_1.plot.line()
 plt.show()

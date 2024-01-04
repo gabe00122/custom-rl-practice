@@ -1,13 +1,18 @@
+import math
 from pathlib import Path
 from .settings import RunSettings
 from .train import train
+
+
+def scale(base, width, depth):
+    return base / math.sqrt(width * depth)
 
 
 def base_settings() -> RunSettings:
     return {
         'seed': 57584,
         'total_steps': 500_000,
-        'env_name': 'CartPole-v1',
+        'env_name': 'LunarLander-v2',
         'env_num': 64,
         'discount': 0.99,
         'actor_hidden_layers': [64, 64],
@@ -24,7 +29,7 @@ def base_settings() -> RunSettings:
 
 
 def main():
-    run_dir = Path('./blank').absolute()
+    run_dir = Path('./adamw-l2').absolute()
     #for i in range(4):
     settings = base_settings()
     # settings['seed'] = i

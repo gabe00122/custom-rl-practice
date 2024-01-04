@@ -1,5 +1,5 @@
 import gymnasium as gym
-from ..networks.mlp import Mlp
+from ..networks.mlp import MlpSkip as Mlp
 from .actor_critic import actor_critic
 from jax import random
 import orbax.checkpoint as ocp
@@ -13,11 +13,11 @@ def main():
 
     key = random.PRNGKey(53245)
 
-    actor_model = Mlp(features=[128, 128, 128, action_space], last_layer_scale=0.01)
-    critic_model = Mlp(features=[128, 128, 128, 1], last_layer_scale=1.0)
+    actor_model = Mlp(features=[128, 128, action_space], last_layer_scale=0.01)
+    critic_model = Mlp(features=[128, 128, 1], last_layer_scale=1.0)
     _, act = actor_critic(actor_model, critic_model)
 
-    cp_path = Path('./run-lander-l2-fix-last-layer-init/params').absolute()
+    cp_path = Path('./gcu-less-l2/params').absolute()
     orbax_checkpointer = ocp.PyTreeCheckpointer()
     raw_restored = orbax_checkpointer.restore(cp_path)
     actor_params = raw_restored['actor_training_state']['params']

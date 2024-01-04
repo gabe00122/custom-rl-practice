@@ -41,10 +41,11 @@ def create_training_params(
     actor_training_state = TrainState.create(
         apply_fn=actor_model.apply,
         params=actor_params,
-        tx=optax.adam(
+        tx=optax.adamw(
             optax.linear_schedule(actor_lr, 0, total_steps),
             b1=actor_beta,
-            b2=actor_beta
+            b2=actor_beta,
+            weight_decay=0.001,
         )
     )
 
@@ -53,10 +54,11 @@ def create_training_params(
     critic_training_state = TrainState.create(
         apply_fn=critic_model.apply,
         params=critic_params,
-        tx=optax.adam(
+        tx=optax.adamw(
             optax.linear_schedule(critic_lr, 0, total_steps),
             b1=critic_beta,
-            b2=critic_beta
+            b2=critic_beta,
+            weight_decay=0.001,
         )
     )
 

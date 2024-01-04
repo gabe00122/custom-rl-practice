@@ -3,12 +3,12 @@ from jax import numpy as jnp, random, Array
 import gymnax
 from pathlib import Path
 from tqdm import tqdm
-from functools import partial
 from typing import TypedDict
 
 from .run_settings import RunSettings
 from .initialize import create_actor_critic
 from .actor_critic import TrainingState
+from .metrics.metrics_recorder import MetricsRecorder, MetricsRecorderState
 
 StepState = TypedDict("StepState", {
     "params": TrainingState,
@@ -16,6 +16,7 @@ StepState = TypedDict("StepState", {
     "env_state": Array,
     "importance": Array,
     "obs": Array,
+    "metrics_recorder_state": MetricsRecorderState,
 })
 
 
@@ -34,12 +35,17 @@ def train(settings: RunSettings, save_path: Path):
 
     actor_critic = create_actor_critic(settings, action_space, state_space)
 
-    actor_critic_params, key = actor_critic.init(key)
+    key, actor_critic_key = random.split(key)
+    actor_critic_params = actor_critic.init(actor_critic_key)
 
-    key, *env_keys = random.split(key, env_num + 1)
+    key, env_key = random.split(key)
+    env_keys = random.split(env_key, env_num)
     obs, state = reset_rng(env_keys, env_params)
 
     act_rng = jax.vmap(actor_critic.act, in_axes=(None, 0, 0))
+
+    steps_per_update = 20
+    metrics_recorder = MetricsRecorder.create(steps_per_update, env_num)
 
     step_state: StepState = {
         "params": actor_critic_params,
@@ -47,23 +53,32 @@ def train(settings: RunSettings, save_path: Path):
         "env_state": state,
         "importance": jnp.ones((env_num,)),
         "obs": obs,
+        "metrics_recorder_state": metrics_recorder.init(),
     }
 
     @jax.jit
-    def train_step(step_state: StepState) -> tuple[StepState, Array]:
+    def train_step(step_state: StepState) -> StepState:
         params = step_state['params']
         key = step_state['key']
         env_state = step_state['env_state']
         importance = step_state['importance']
         obs = step_state['obs']
+        metrics_recorder_state = step_state['metrics_recorder_state']
 
-        key, *act_keys = random.split(key, env_num + 1)
+        keys = random.split(key, env_num + 1)
+        key = keys[0]
+        act_keys = keys[1:]
+
         actions = act_rng(params, obs, act_keys)
 
-        key, *step_keys = random.split(key, env_num + 1)
+        keys = random.split(key, env_num + 1)
+        key = keys[0]
+        env_keys = keys[1:]
         next_obs, env_state, rewards, done, _ = step_rng(env_keys, env_state, actions, env_params)
 
         params, metrics, importance = actor_critic.train_step(params, obs, actions, rewards, next_obs, done, importance)
+
+        metrics_recorder_state = metrics_recorder.update(metrics_recorder_state, done, rewards)
 
         return {
             "params": params,
@@ -71,19 +86,21 @@ def train(settings: RunSettings, save_path: Path):
             "env_state": env_state,
             "importance": importance,
             "obs": next_obs,
+            "metrics_recorder_state": metrics_recorder_state,
         }
 
     @jax.jit
-    def train_20_steps(step_state: StepState) -> tuple[StepState, Array]:
+    def train_n_steps(step_state: StepState) -> StepState:
         # using lax reduce
-        step_state = jax.lax.fori_loop(0, 1, lambda i, x: train_step(x), step_state)
+        return jax.lax.scan(lambda s, _: (train_step(s), None), step_state, None, length=steps_per_update)[0]
 
-        return step_state
-
-
-    with tqdm(range(total_steps), unit='steps') as tsteps:
+    with tqdm(range(total_steps), unit='steps', unit_scale=steps_per_update) as tsteps:
         for step in tsteps:
             tsteps.set_description(f"Step {step}")
-            step_state = train_20_steps(step_state)
+            step_state = train_n_steps(step_state)
 
-            #tsteps.set_postfix(reward=reward)
+            metrics_recorder_state = step_state['metrics_recorder_state']
+            mean_reward = jnp.mean(step_state['metrics_recorder_state']['rewards'])
+            step_state |= {"metrics_recorder_state": metrics_recorder.reset(metrics_recorder_state)}
+
+            tsteps.set_postfix(reward=mean_reward)

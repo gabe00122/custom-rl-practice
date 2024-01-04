@@ -75,7 +75,7 @@ def actor_critic_v3(init_actor_params, init_critic_params, actor_model: nn.Modul
                             (critic_values - expected_values) ** 2)
             jax.debug.print("critic_loss - loss: {}", loss)
 
-        loss += l2_init_regularization(critic_params, init_critic_params, alpha=0.001)
+        #loss += l2_init_regularization(critic_params, init_critic_params, alpha=0.001)
 
         return loss
 
@@ -101,10 +101,10 @@ def actor_critic_v3(init_actor_params, init_critic_params, actor_model: nn.Modul
             jax.debug.print("actor_loss - actions: {}", actions)
             jax.debug.print("actor_loss - action_probs: {}", action_probs)
             jax.debug.print("actor_loss - selected_action_prob: {}", selected_action_prob)
-            jax.debug.print("actor_loss - l2_loss: {}", l2_loss)
+            # jax.debug.print("actor_loss - l2_loss: {}", l2_loss)
             jax.debug.print("actor_loss - e_loss: {}", e_loss)
 
-        return loss + e_loss + l2_loss, (l2_loss, e_loss)
+        return loss + e_loss, (l2_loss, e_loss)
 
     def update_actor(actor_training_state: TrainState, states, actions, advantages, actor_l2_regularization, entropy_regularization) -> tuple[TrainState, Array, Array, Array]:
         (loss, (l2_loss, e_loss)), gradient = jax.value_and_grad(actor_loss, has_aux=True)(actor_training_state.params, states, actions, advantages, actor_l2_regularization, entropy_regularization)

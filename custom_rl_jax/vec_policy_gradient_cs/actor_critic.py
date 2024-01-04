@@ -56,8 +56,8 @@ class ActorCritic(PyTreeNode):
     def init(
         self,
         key: ArrayLike,
-    ) -> tuple[TrainingState, Array]:
-        key, actor_key, critic_key = random.split(key, 3)
+    ) -> TrainingState:
+        actor_key, critic_key = random.split(key)
         observation_dummy = jnp.zeros((self.observation_space,))
 
         actor_params = self.actor_model.init(actor_key, observation_dummy)
@@ -65,16 +65,13 @@ class ActorCritic(PyTreeNode):
         actor_opt_state = self.actor_optimizer.init(actor_params)
         critic_opt_state = self.critic_optimizer.init(critic_params)
 
-        return (
-            TrainingState(
-                init_actor_params=actor_params,
-                actor_params=actor_params,
-                actor_opt_state=actor_opt_state,
-                init_critic_params=critic_params,
-                critic_params=critic_params,
-                critic_opt_state=critic_opt_state,
-            ),
-            key,
+        return TrainingState(
+            init_actor_params=actor_params,
+            actor_params=actor_params,
+            actor_opt_state=actor_opt_state,
+            init_critic_params=critic_params,
+            critic_params=critic_params,
+            critic_opt_state=critic_opt_state,
         )
 
     @jax.jit

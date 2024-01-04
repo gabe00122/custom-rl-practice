@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import orbax.checkpoint
 from pathlib import Path
-from ..networks.mlp import Mlp
+from ..networks.mlp import MlpSkip as Mlp
 import flax.linen as nn
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider
@@ -16,14 +16,18 @@ def main():
     state_space = env.observation_space.shape[0]
     print(state_space)
 
-    actor_model = Mlp(features=[64, 64, action_space], last_layer_scale=0.01)
-    critic_model = Mlp(features=[64, 64, 1], last_layer_scale=1.0)
+    actor_model = Mlp(features=[128, 128, action_space], last_layer_scale=0.01)
+    critic_model = Mlp(features=[128, 128, 1], last_layer_scale=1.0)
 
-    checkpoint_path = Path("./old/run-lander-l2-init/params").absolute()
+    checkpoint_path = Path("./gcu-less-l2/params").absolute()
     checkpointer = orbax.checkpoint.PyTreeCheckpointer()
     raw_restored = checkpointer.restore(checkpoint_path)
-    actor_params = raw_restored['actor_training_state']['params']
-    critic_params = raw_restored['critic_training_state']['params']
+
+    actor_key, critic_key = jax.random.split(jax.random.PRNGKey(42), 2)
+    actor_params = actor_model.init(actor_key, jnp.zeros((state_space,)))
+    critic_params = critic_model.init(critic_key, jnp.zeros((state_space,)))
+    #actor_params = raw_restored['actor_training_state']['params']
+    #critic_params = raw_restored['critic_training_state']['params']
 
     def sample_probs(params, state):
         return jnp.argmax(nn.softmax(actor_model.apply(params, state)))
