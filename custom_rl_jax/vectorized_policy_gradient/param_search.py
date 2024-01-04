@@ -12,7 +12,7 @@ def base_settings() -> RunSettings:
     return {
         'seed': 57584,
         'total_steps': 500_000,
-        'env_name': 'LunarLander-v2',
+        'env_name': 'CartPole-v1',
         'env_num': 64,
         'discount': 0.99,
         'actor_hidden_layers': [64, 64],

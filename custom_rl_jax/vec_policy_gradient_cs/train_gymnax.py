@@ -44,7 +44,7 @@ def train(settings: RunSettings, save_path: Path):
 
     act_rng = jax.vmap(actor_critic.act, in_axes=(None, 0, 0))
 
-    steps_per_update = 20
+    steps_per_update = 100
     metrics_recorder = MetricsRecorder.create(steps_per_update, env_num)
 
     step_state: StepState = {
@@ -94,7 +94,7 @@ def train(settings: RunSettings, save_path: Path):
         # using lax reduce
         return jax.lax.scan(lambda s, _: (train_step(s), None), step_state, None, length=steps_per_update)[0]
 
-    with tqdm(range(total_steps), unit='steps', unit_scale=steps_per_update) as tsteps:
+    with tqdm(range(total_steps // steps_per_update), unit='steps', unit_scale=steps_per_update) as tsteps:
         for step in tsteps:
             tsteps.set_description(f"Step {step}")
             step_state = train_n_steps(step_state)
