@@ -10,23 +10,26 @@ from .initialize import create_actor_critic
 from .actor_critic import TrainingState
 from .metrics.metrics_recorder import MetricsRecorder, MetricsRecorderState
 
-StepState = TypedDict("StepState", {
-    "params": TrainingState,
-    "key": Array,
-    "env_state": Array,
-    "importance": Array,
-    "obs": Array,
-    "metrics_recorder_state": MetricsRecorderState,
-})
+StepState = TypedDict(
+    "StepState",
+    {
+        "params": TrainingState,
+        "key": Array,
+        "env_state": Array,
+        "importance": Array,
+        "obs": Array,
+        "metrics_recorder_state": MetricsRecorderState,
+    },
+)
 
 
 def train(settings: RunSettings, save_path: Path):
-    total_steps = settings['total_steps']
-    env_num = settings['env_num']
+    total_steps = settings["total_steps"]
+    env_num = settings["env_num"]
 
-    key = random.PRNGKey(settings['seed'])
+    key = random.PRNGKey(settings["seed"])
 
-    env, env_params = gymnax.make(settings['env_name'])
+    env, env_params = gymnax.make(settings["env_name"])
     reset_rng = jax.vmap(env.reset, in_axes=(0, None))
     step_rng = jax.vmap(env.step, in_axes=(0, 0, 0, None))
 
@@ -58,12 +61,12 @@ def train(settings: RunSettings, save_path: Path):
 
     @jax.jit
     def train_step(step_state: StepState) -> StepState:
-        params = step_state['params']
-        key = step_state['key']
-        env_state = step_state['env_state']
-        importance = step_state['importance']
-        obs = step_state['obs']
-        metrics_recorder_state = step_state['metrics_recorder_state']
+        params = step_state["params"]
+        key = step_state["key"]
+        env_state = step_state["env_state"]
+        importance = step_state["importance"]
+        obs = step_state["obs"]
+        metrics_recorder_state = step_state["metrics_recorder_state"]
 
         keys = random.split(key, env_num + 1)
         key = keys[0]
@@ -94,13 +97,13 @@ def train(settings: RunSettings, save_path: Path):
         # using lax reduce
         return jax.lax.scan(lambda s, _: (train_step(s), None), step_state, None, length=steps_per_update)[0]
 
-    with tqdm(range(total_steps // steps_per_update), unit='steps', unit_scale=steps_per_update) as tsteps:
+    with tqdm(range(total_steps // steps_per_update), unit="steps", unit_scale=steps_per_update) as tsteps:
         for step in tsteps:
             tsteps.set_description(f"Step {step}")
             step_state = train_n_steps(step_state)
 
-            metrics_recorder_state = step_state['metrics_recorder_state']
-            mean_reward = jnp.mean(step_state['metrics_recorder_state']['rewards'])
+            metrics_recorder_state = step_state["metrics_recorder_state"]
+            mean_reward = jnp.mean(step_state["metrics_recorder_state"]["rewards"])
             step_state |= {"metrics_recorder_state": metrics_recorder.reset(metrics_recorder_state)}
 
             tsteps.set_postfix(reward=mean_reward)

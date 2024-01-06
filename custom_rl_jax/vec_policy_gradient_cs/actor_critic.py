@@ -96,7 +96,7 @@ class ActorCritic(PyTreeNode):
 
         critic_values = state_values_rng(critic_params, obs)
         td_error = expected_values - critic_values
-        loss = (td_error ** 2).mean()
+        loss = (td_error**2).mean()
 
         reg_loss = 0.0
         if self.critic_regularization_type == "l2_init":
@@ -161,7 +161,7 @@ class ActorCritic(PyTreeNode):
         loss += reg_loss
 
         if self.actor_entropy_regularization > 0.0:
-            loss += self.actor_entropy_regularization * entropy
+            loss -= self.actor_entropy_regularization * entropy
 
         return loss, (reg_loss, entropy)
 
