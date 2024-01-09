@@ -22,13 +22,13 @@ def create_critic_model(settings: RunSettings) -> nn.Module:
 def create_actor_critic(settings: RunSettings, action_space: int, observation_space: int) -> ActorCritic:
     actor_model = create_actor_model(settings, action_space)
     actor_optimizer = optax.chain(
-        optax.clip_by_global_norm(50.0),
-        optax.adamw(settings["actor_learning_rate"], b1=0.9, b2=0.98, weight_decay=0.01),
+        optax.clip_by_global_norm(settings["actor_clip_norm"]),
+        optax.adamw(settings["actor_learning_rate"], b1=0.9, b2=0.98, weight_decay=settings["critic_weight_decay"]),
     )
     critic_model = create_critic_model(settings)
     critic_optimizer = optax.chain(
-        optax.clip_by_global_norm(50.0),
-        optax.adamw(settings["critic_learning_rate"], b1=0.9, b2=0.98, weight_decay=0.001),
+        optax.clip_by_global_norm(settings["critic_clip_norm"]),
+        optax.adamw(settings["critic_learning_rate"], b1=0.9, b2=0.98, weight_decay=settings["actor_weight_decay"]),
     )
 
     actor_critic = ActorCritic(

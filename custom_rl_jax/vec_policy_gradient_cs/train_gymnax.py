@@ -1,14 +1,19 @@
 import jax
 from jax import numpy as jnp, random, Array
+import numpy as np
 import gymnax
+from orbax.checkpoint import PyTreeCheckpointer
 from pathlib import Path
 from tqdm import tqdm
 from typing import TypedDict
+import shutil
+import json
 
 from .run_settings import RunSettings
 from .initialize import create_actor_critic
 from .actor_critic import TrainingState
 from .metrics.metrics_recorder import MetricsRecorder, MetricsRecorderState
+from .metrics.metrics_logger_np import MetricsLoggerNP
 
 StepState = TypedDict(
     "StepState",
@@ -94,8 +99,9 @@ def train(settings: RunSettings, save_path: Path):
 
     @jax.jit
     def train_n_steps(step_state: StepState) -> StepState:
-        # using lax reduce
-        return jax.lax.scan(lambda s, _: (train_step(s), None), step_state, None, length=steps_per_update)[0]
+        return jax.lax.fori_loop(0, steps_per_update, lambda _, s: train_step(s), step_state)
+
+    metrics_logger = MetricsLoggerNP(total_steps)
 
     with tqdm(range(total_steps // steps_per_update), unit="steps", unit_scale=steps_per_update) as tsteps:
         for step in tsteps:
@@ -103,7 +109,36 @@ def train(settings: RunSettings, save_path: Path):
             step_state = train_n_steps(step_state)
 
             metrics_recorder_state = step_state["metrics_recorder_state"]
-            mean_reward = jnp.mean(step_state["metrics_recorder_state"]["rewards"])
+            metrics_logger.log(metrics_recorder_state)
+
+            step_mean_reward = jnp.mean(metrics_recorder_state["mean_rewards"])
             step_state |= {"metrics_recorder_state": metrics_recorder.reset(metrics_recorder_state)}
 
-            tsteps.set_postfix(reward=mean_reward)
+            tsteps.set_postfix(reward=step_mean_reward)
+
+    create_directory(save_path)
+    save_settings(save_path / "settings.json", settings)
+    save_params(save_path / "models", step_state["params"])
+    save_metrics(save_path / "metrics.parquet", metrics_logger)
+
+    return np.mean(metrics_logger.mean_rewards)
+
+
+def create_directory(path: Path):
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def save_settings(path, settings):
+    with open(path, 'w') as file:
+        json.dump(settings, file, indent=2)
+
+
+def save_params(path: Path, params: TrainingState):
+    checkpointer = PyTreeCheckpointer()
+    checkpointer.save(path.absolute(), params)
+
+
+def save_metrics(path: Path, metrics: MetricsLoggerNP):
+    metrics.get_dataframe().to_parquet(path, index=False)

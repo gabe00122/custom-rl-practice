@@ -33,9 +33,7 @@ class FinishedRewardRecorder:
         finished_episode_rewards = jnp.where(done, ongoing_episode_rewards, state["finished_episode_rewards"])
         ongoing_episode_rewards = jnp.where(done, jnp.zeros((self.vec_num,)), ongoing_episode_rewards)
 
-        mean_finished_episode_rewards = jnp.mean(finished_episode_rewards)
-
         return {
             "finished_episode_rewards": finished_episode_rewards,
             "ongoing_episode_rewards": ongoing_episode_rewards,
-        }, mean_finished_episode_rewards
+        }, finished_episode_rewards

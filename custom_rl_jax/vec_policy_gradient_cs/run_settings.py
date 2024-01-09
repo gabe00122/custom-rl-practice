@@ -23,6 +23,11 @@ RunSettings = TypedDict(
         "actor_regularization_type": str,
         "actor_regularization_alpha": float,
         "actor_entropy_regularization": float,
+
+        "actor_weight_decay": float,
+        "critic_weight_decay": float,
+        "actor_clip_norm": float,
+        "critic_clip_norm": float,
     },
 )
 
