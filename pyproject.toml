@@ -22,8 +22,14 @@ optax = "^0.1.7"
 optuna = "^3.5.0"
 gymnax = "^0.0.6"
 pyarrow = "^14.0.2"
+jaxtyping = "^0.2.25"
+distrax = "^0.1.5"
+jax-dataclasses = "^1.6.0"
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+enjoy = "custom_rl_jax.vec_policy_gradient_cs.enjoy:main"

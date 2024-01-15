@@ -1,7 +1,7 @@
 import jax
-from jax import numpy as jnp, random, Array
+from jax import numpy as jnp, random
+from jaxtyping import Array
 import numpy as np
-import gymnax
 from orbax.checkpoint import PyTreeCheckpointer
 from pathlib import Path
 from tqdm import tqdm
@@ -14,6 +14,9 @@ from .initialize import create_actor_critic
 from .actor_critic import TrainingState
 from .metrics.metrics_recorder import MetricsRecorder, MetricsRecorderState
 from .metrics.metrics_logger_np import MetricsLoggerNP
+
+from ..enviroments.simple_gridworld import SimpleGridWorld, Params
+from ..enviroments.encoding import encode_observation, decode_action
 
 StepState = TypedDict(
     "StepState",
@@ -34,12 +37,14 @@ def train(settings: RunSettings, save_path: Path):
 
     key = random.PRNGKey(settings["seed"])
 
-    env, env_params = gymnax.make(settings["env_name"])
+    env = SimpleGridWorld(16, 16)
+    env_params = Params()
+    # gymnax.make(settings["env_name"])
     reset_rng = jax.vmap(env.reset, in_axes=(0, None))
     step_rng = jax.vmap(env.step, in_axes=(0, 0, 0, None))
 
-    action_space = env.action_space(env_params).n
-    state_space = env.state_space(env_params).num_spaces - 1
+    action_space = 4 # env.action_space(env_params).n
+    state_space = 4 # env.state_space(env_params).num_spaces - 1
 
     actor_critic = create_actor_critic(settings, action_space, state_space)
 
@@ -49,6 +54,7 @@ def train(settings: RunSettings, save_path: Path):
     key, env_key = random.split(key)
     env_keys = random.split(env_key, env_num)
     obs, state = reset_rng(env_keys, env_params)
+    obs = encode_observation(obs)
 
     act_rng = jax.vmap(actor_critic.act, in_axes=(None, 0, 0))
 
@@ -82,7 +88,8 @@ def train(settings: RunSettings, save_path: Path):
         keys = random.split(key, env_num + 1)
         key = keys[0]
         env_keys = keys[1:]
-        next_obs, env_state, rewards, done, _ = step_rng(env_keys, env_state, actions, env_params)
+        next_obs, env_state, rewards, done = step_rng(env_keys, env_state, decode_action(actions), env_params)
+        next_obs = encode_observation(next_obs)
 
         params, metrics, importance = actor_critic.train_step(params, obs, actions, rewards, next_obs, done, importance)
 

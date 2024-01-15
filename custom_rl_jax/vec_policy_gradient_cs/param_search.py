@@ -37,13 +37,13 @@ def sample_settings(trail: optuna.Trial):
 
 
 base_path = Path("./search").absolute()
-trial_num = 0
+# trial_num = 0
 
 
 def objective(trial: optuna.Trial):
-    trial_num += 1
+    # trial_num += 1
     settings = sample_settings(trial)
-    result = train(settings, base_path / f"{trial_num}")
+    result = train(settings, base_path / "1")
     jax.clear_caches()
     return result
 

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from functools import partial
+from functools import partial, partialmethod
 from typing import TypedDict
 import jax
 from jax import numpy as jnp, Array
