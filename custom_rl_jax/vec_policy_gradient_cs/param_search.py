@@ -11,7 +11,7 @@ def sample_settings(trail: optuna.Trial):
     return RunSettings(
         git_hash="tbd",
         seed=random.randint(0, 100_000),
-        total_steps=50000,
+        total_steps=500000,
         env_name="CartPole-v1",
         env_num=160,
         discount=trail.suggest_float('discount', 0.99, 1.0),

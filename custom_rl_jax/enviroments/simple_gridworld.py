@@ -61,7 +61,7 @@ class SimpleGridWorld:
         )
 
         next_state = State(state.step + 1, state.goal, next_position)
-        done = jnp.array_equal(next_position, state.goal) | (state.step >= 100)
+        done = jnp.array_equal(next_position, state.goal) | (state.step >= 500)
 
         observation, state = jax.lax.cond(
             done,

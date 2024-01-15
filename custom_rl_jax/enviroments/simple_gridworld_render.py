@@ -20,7 +20,7 @@ class Visualizer:
         pygame.draw.circle(self.screen, (255, 0, 0), position, self.scale)
         pygame.draw.circle(self.screen, (0, 255, 0), goal, self.scale)
         pygame.display.flip()
-        self.clock.tick(10)
+        self.clock.tick_busy_loop(10)
 
 
 def array_to_vector2(array: Int[Array, "2"]) -> Vector2:

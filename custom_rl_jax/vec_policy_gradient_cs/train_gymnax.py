@@ -18,6 +18,9 @@ from .metrics.metrics_logger_np import MetricsLoggerNP
 from ..enviroments.simple_gridworld import SimpleGridWorld, Params
 from ..enviroments.encoding import encode_observation, decode_action
 
+encode_observation = jax.vmap(encode_observation)
+decode_action = jax.vmap(decode_action)
+
 StepState = TypedDict(
     "StepState",
     {
@@ -37,7 +40,7 @@ def train(settings: RunSettings, save_path: Path):
 
     key = random.PRNGKey(settings["seed"])
 
-    env = SimpleGridWorld(16, 16)
+    env = SimpleGridWorld(100, 100)
     env_params = Params()
     # gymnax.make(settings["env_name"])
     reset_rng = jax.vmap(env.reset, in_axes=(0, None))
