@@ -1,6 +1,7 @@
 from flax import linen as nn
 import optax
 from ..networks.mlp import Mlp
+from ..networks.actor_critic_model import ActorCriticModel
 from .run_settings import RunSettings
 from .actor_critic import ActorCritic
 
@@ -20,27 +21,30 @@ def create_critic_model(settings: RunSettings) -> nn.Module:
 
 
 def create_actor_critic(settings: RunSettings, action_space: int, observation_space: int) -> ActorCritic:
+    root_model = Mlp(features=settings["root_hidden_layers"])
     actor_model = create_actor_model(settings, action_space)
-    actor_optimizer = optax.chain(
-        optax.clip_by_global_norm(settings["actor_clip_norm"]),
-        optax.adamw(settings["actor_learning_rate"], b1=0.9, b2=0.98, weight_decay=settings["critic_weight_decay"]),
-    )
     critic_model = create_critic_model(settings)
-    critic_optimizer = optax.chain(
-        optax.clip_by_global_norm(settings["critic_clip_norm"]),
-        optax.adamw(settings["critic_learning_rate"], b1=0.9, b2=0.98, weight_decay=settings["actor_weight_decay"]),
+
+    actor_critic_model = ActorCriticModel(root=root_model, actor=actor_model, critic=critic_model)
+
+    optimizer = optax.chain(
+        optax.clip_by_global_norm(settings["clip_norm"]),
+        optax.adamw(
+            optax.linear_schedule(settings["learning_rate"], 0, settings['total_steps']),
+            b1=settings["adam_beta"],
+            b2=settings["adam_beta"],
+            weight_decay=settings["weight_decay"]
+        ),
     )
 
     actor_critic = ActorCritic(
         action_space=action_space,
         observation_space=observation_space,
-        actor_model=actor_model,
-        actor_optimizer=actor_optimizer,
-        critic_model=critic_model,
-        critic_optimizer=critic_optimizer,
+        model=actor_critic_model,
+        optimizer=optimizer,
         discount=settings["discount"],
-        actor_regularization_alpha=settings["actor_regularization_alpha"],
-        actor_entropy_regularization=settings["actor_entropy_regularization"],
-        critic_regularization_alpha=settings["actor_regularization_alpha"],
+        actor_coef=settings["actor_coef"],
+        critic_coef=settings["critic_coef"],
+        entropy_coef=settings["entropy_coef"],
     )
     return actor_critic

@@ -1,3 +1,4 @@
+import gymnax
 import jax
 from jax import numpy as jnp, random
 from jaxtyping import Array
@@ -40,8 +41,8 @@ def train(settings: RunSettings, save_path: Path):
 
     key = random.PRNGKey(settings["seed"])
 
-    env = SimpleGridWorld(100, 100)
-    env_params = Params()
+    env, env_params = gymnax.make(settings['env_name']) #SimpleGridWorld(100, 100)
+    # env_params = Params()
     # gymnax.make(settings["env_name"])
     reset_rng = jax.vmap(env.reset, in_axes=(0, None))
     step_rng = jax.vmap(env.step, in_axes=(0, 0, 0, None))
@@ -57,7 +58,7 @@ def train(settings: RunSettings, save_path: Path):
     key, env_key = random.split(key)
     env_keys = random.split(env_key, env_num)
     obs, state = reset_rng(env_keys, env_params)
-    obs = encode_observation(obs)
+    #obs = encode_observation(obs)
 
     act_rng = jax.vmap(actor_critic.act, in_axes=(None, 0, 0))
 
@@ -91,8 +92,8 @@ def train(settings: RunSettings, save_path: Path):
         keys = random.split(key, env_num + 1)
         key = keys[0]
         env_keys = keys[1:]
-        next_obs, env_state, rewards, done = step_rng(env_keys, env_state, decode_action(actions), env_params)
-        next_obs = encode_observation(next_obs)
+        next_obs, env_state, rewards, done, _ = step_rng(env_keys, env_state, actions, env_params)
+        #next_obs = encode_observation(next_obs)
 
         params, metrics, importance = actor_critic.train_step(params, obs, actions, rewards, next_obs, done, importance)
 

@@ -5,7 +5,7 @@ from typing import Sequence
 
 class Mlp(nn.Module):
     features: Sequence[int]
-    last_layer_scale: float = 1.0
+    last_layer_scale: float = 2.0
 
     @nn.compact
     def __call__(self, inputs):

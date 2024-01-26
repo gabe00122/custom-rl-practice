@@ -14,25 +14,20 @@ def sample_settings(trail: optuna.Trial):
         total_steps=500000,
         env_name="CartPole-v1",
         env_num=160,
-        discount=trail.suggest_float('discount', 0.99, 1.0),
+        discount=0.99, #trail.suggest_float('discount', 0.99, 1.0),
+        root_hidden_layers=[64],
         actor_hidden_layers=[64, 64],
         critic_hidden_layers=[64, 64],
         actor_last_layer_scale=0.01,
         critic_last_layer_scale=1.0,
-        actor_learning_rate=trail.suggest_float('actor_learning_rate', 0.00001, 0.001),
-        critic_learning_rate=trail.suggest_float('critic_learning_rate', 0.00001, 0.001),
-        actor_adam_beta=trail.suggest_float('actor_adam_beta', 0.9, 0.9999),
-        critic_adam_beta=trail.suggest_float('critic_adam_beta', 0.9, 0.9999),
-        critic_regularization_type="l2-init",
-        critic_regularization_alpha=0,  # 0.0001,
-        actor_regularization_type="l2-init",
-        actor_regularization_alpha=0,  # 0.001,
-        actor_entropy_regularization=0,  # 0.000005,
-
-        actor_weight_decay=trail.suggest_float('actor_weight_decay', 0.0, 0.01),
-        critic_weight_decay=trail.suggest_float('critic_weight_decay', 0.0, 0.01),
-        actor_clip_norm=trail.suggest_float('actor_clip_norm', 0.0, 50.0),
-        critic_clip_norm=trail.suggest_float('critic_clip_norm', 0.0, 50.0),
+        optimizer="adam",
+        learning_rate=0.0001, #trail.suggest_float('learning_rate', 0.00001, 0.001),
+        adam_beta=0.97, #trail.suggest_float('adam_beta', 0.9, 0.9999),
+        weight_decay=0.0, #trail.suggest_float('weight_decay', 0.0, 0.01),
+        clip_norm=50.0, #trail.suggest_float('clip_norm', 0.0, 50.0),
+        actor_coef=0.25, #trail.suggest_float('actor_coef', 0.1, 1.0),
+        critic_coef=1.0, #trail.suggest_float('critic_coef', 0.5, 1.0),
+        entropy_coef=0.0, #trail.suggest_float('entropy_coef', 0.0, 0.1),
     )
 
 
@@ -51,7 +46,12 @@ def objective(trial: optuna.Trial):
 def main():
     sampler = TPESampler(n_startup_trials=5)
 
-    study = optuna.create_study(sampler=sampler, direction="maximize")
+    study = optuna.create_study(
+        sampler=sampler,
+        direction="maximize",
+        storage="sqlite:///db.sqlite3",
+        study_name="cartpole"
+    )
     try:
         study.optimize(objective, n_trials=100)
     except KeyboardInterrupt:
@@ -74,4 +74,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    #main()
+    settings = sample_settings(None)
+    result = train(settings, base_path / "1")
