@@ -97,7 +97,7 @@ def train(settings: RunSettings, save_path: Path):
 
         params, metrics, importance = actor_critic.train_step(params, obs, actions, rewards, next_obs, done, importance)
 
-        metrics_recorder_state = metrics_recorder.update(metrics_recorder_state, done, rewards)
+        metrics_recorder_state = metrics_recorder.update(metrics_recorder_state, done, rewards, metrics)
 
         return {
             "params": params,

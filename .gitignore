@@ -13,3 +13,5 @@ multi_search/
 run-lander-l2-fix-last-layer-init/
 current/
 search/
+
+db.sqlite3

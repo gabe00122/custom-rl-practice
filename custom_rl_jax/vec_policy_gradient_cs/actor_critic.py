@@ -5,22 +5,11 @@ from flax import linen as nn, struct
 from flax.core.frozen_dict import FrozenDict, Mapping
 from flax.struct import PyTreeNode
 import optax
-from typing import Any, TypedDict, NamedTuple
+from typing import Any, NamedTuple
+from .metrics.metrics_type import Metrics
 from .regularization import entropy_loss
 
 type ModelParams = FrozenDict[str, Mapping[str, Any]] | dict[str, Any]
-
-
-Metrics = TypedDict(
-    "Metrics",
-    {
-        "state_value": Array,
-        "td_error": Array,
-        "actor_loss": Array,
-        "critic_loss": Array,
-        "entropy": Array,
-    },
-)
 
 
 class TrainingState(NamedTuple):
@@ -73,12 +62,12 @@ class ActorCritic(PyTreeNode):
         v_entropy_loss = jax.vmap(entropy_loss)
 
         action_logits, critic_values = v_model(model_params, obs)
-        _, next_critic_values = jax.lax.stop_gradient(v_model(model_params, next_obs))
+        _, next_critic_values = v_model(model_params, next_obs)
 
         expected_values = jnp.where(
             done,
             rewards,
-            rewards + self.discount * next_critic_values,
+            rewards + self.discount * jax.lax.stop_gradient(next_critic_values),
         )
 
         td_error = expected_values - critic_values
