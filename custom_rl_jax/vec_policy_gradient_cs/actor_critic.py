@@ -60,33 +60,33 @@ class ActorCritic(PyTreeNode):
     ) -> tuple[Array, Metrics]:
         v_model = jax.vmap(self.model.apply, (None, 0), (0, 0))
         v_entropy_loss = jax.vmap(entropy_loss)
+        v_log_softmax = jax.vmap(nn.log_softmax)
 
-        action_logits, critic_values = v_model(model_params, obs)
-        _, next_critic_values = v_model(model_params, next_obs)
+        action_logits, vf_values = v_model(model_params, obs)
+        _, next_critic_values = v_model(jax.lax.stop_gradient(model_params), next_obs)
 
-        expected_values = jnp.where(
+        returns = jnp.where(
             done,
             rewards,
-            rewards + self.discount * jax.lax.stop_gradient(next_critic_values),
+            rewards + self.discount * next_critic_values,
         )
 
-        td_error = expected_values - critic_values
+        td_error = returns - vf_values
         critic_loss = (td_error**2).mean()
 
-        action_probs = nn.log_softmax(action_logits, 0)
+        action_probs = v_log_softmax(action_logits)
         selected_action_prob = action_probs[jnp.arange(action_probs.shape[0]), actions]
         actor_loss = -jnp.mean(selected_action_prob * td_error * importance)
 
         entropy = jnp.mean(v_entropy_loss(action_probs))
 
-        loss = 0.25 * actor_loss + critic_loss # + self.entropy_coef * entropy
-
+        loss = critic_loss
 
         metrics: Metrics = {
             "actor_loss": actor_loss,
             "critic_loss": critic_loss,
             "td_error": jnp.mean(td_error),
-            "state_value": jnp.mean(expected_values),
+            "state_value": jnp.mean(returns),
             "entropy": entropy,
         }
 

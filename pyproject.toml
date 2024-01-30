@@ -33,3 +33,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 enjoy = "custom_rl_jax.vec_policy_gradient_cs.enjoy:main"
+param_search = "custom_rl_jax.vec_policy_gradient_cs.param_search:main"

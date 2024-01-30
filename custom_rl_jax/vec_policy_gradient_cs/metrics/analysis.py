@@ -14,12 +14,15 @@ class Analysis:
         return cls(pd.read_parquet(path))
 
     def plot(self):
-        self.df.plot.line()
+        df = self.df.rolling(100).mean()
+        loss = df[['critic_loss']]
+
+        loss.plot.line()
         plt.show()
 
 
 def main():
-    analysis = Analysis.load(Path("./multi_search/1/metrics.parquet"))
+    analysis = Analysis.load(Path("./search/1/metrics.parquet"))
     analysis.plot()
 
 

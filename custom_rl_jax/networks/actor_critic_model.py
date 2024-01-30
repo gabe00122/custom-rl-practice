@@ -5,7 +5,7 @@ from .activation import mish
 
 
 class ActorCriticModel(nn.Module):
-    root: nn.Module
+    #root: nn.Module
     actor: nn.Module
     critic: nn.Module
 
