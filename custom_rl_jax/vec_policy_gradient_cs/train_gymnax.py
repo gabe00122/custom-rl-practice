@@ -47,8 +47,8 @@ def train(settings: RunSettings, save_path: Path):
     reset_rng = jax.vmap(env.reset, in_axes=(0, None))
     step_rng = jax.vmap(env.step, in_axes=(0, 0, 0, None))
 
-    action_space = 4 # env.action_space(env_params).n
-    state_space = 4 # env.state_space(env_params).num_spaces - 1
+    action_space = env.action_space(env_params).n
+    state_space = env.state_space(env_params).num_spaces - 1
 
     actor_critic = create_actor_critic(settings, action_space, state_space)
 

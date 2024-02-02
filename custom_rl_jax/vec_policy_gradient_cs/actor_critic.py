@@ -80,7 +80,7 @@ class ActorCritic(PyTreeNode):
 
         entropy = jnp.mean(v_entropy_loss(action_probs))
 
-        loss = critic_loss
+        loss = self.actor_coef * actor_loss + critic_loss
 
         metrics: Metrics = {
             "actor_loss": actor_loss,
@@ -118,14 +118,20 @@ class ActorCritic(PyTreeNode):
         self,
         params: TrainingState,
         obs: ArrayLike,
-        action: ArrayLike,
+        actions: ArrayLike,
         rewards: ArrayLike,
         next_obs: ArrayLike,
         done: ArrayLike,
         importance: ArrayLike,
     ) -> tuple[TrainingState, Metrics, Array]:
+        assert obs.dtype == jnp.float32
+        assert actions.dtype == jnp.int32
+        assert rewards.dtype == jnp.float32
+        assert next_obs.dtype == jnp.float32
+        assert done.dtype == jnp.bool_
+        assert importance.dtype == jnp.float32
 
-        params, metrics = self.update_model(params, obs, action, rewards, next_obs, done, importance)
+        params, metrics = self.update_model(params, obs, actions, rewards, next_obs, done, importance)
 
         # set the importance back to 1 if it's the end of an episode
         importance = jnp.maximum(importance * self.discount, done)

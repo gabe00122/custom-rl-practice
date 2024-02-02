@@ -15,7 +15,7 @@ class Analysis:
 
     def plot(self):
         df = self.df.rolling(100).mean()
-        loss = df[['critic_loss']]
+        loss = df["critic_loss"]
 
         loss.plot.line()
         plt.show()

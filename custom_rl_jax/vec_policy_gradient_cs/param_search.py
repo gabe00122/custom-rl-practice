@@ -13,7 +13,7 @@ def sample_settings(trail: optuna.Trial):
         seed=random.randint(0, 100_000),
         total_steps=500000,
         env_name="CartPole-v1",
-        env_num=1,
+        env_num=64,
         discount=0.99, #trail.suggest_float('discount', 0.99, 1.0),
         root_hidden_layers=[64],
         actor_hidden_layers=[64, 64],

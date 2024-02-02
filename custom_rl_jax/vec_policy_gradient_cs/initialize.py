@@ -29,11 +29,11 @@ def create_actor_critic(settings: RunSettings, action_space: int, observation_sp
 
     optimizer = optax.chain(
         optax.clip_by_global_norm(settings["clip_norm"]),
-        optax.sgd(
+        optax.adamw(
             optax.linear_schedule(settings["learning_rate"], 0, settings['total_steps']),
-            # b1=settings["adam_beta"],
-            # b2=settings["adam_beta"],
-            # weight_decay=settings["weight_decay"]
+            b1=settings["adam_beta"],
+            b2=settings["adam_beta"],
+            weight_decay=settings["weight_decay"]
         ),
     )
 
